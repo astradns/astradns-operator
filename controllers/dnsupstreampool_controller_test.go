@@ -167,7 +167,7 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 		Expect(k8sClient.Create(context.Background(), pool)).NotTo(Succeed())
 	})
 
-	It("uses a deterministic active pool when multiple pools exist", func() {
+	It("uses the oldest pool as active when multiple pools exist", func() {
 		namespace := createNamespace("pool-multi")
 
 		poolZ := &v1alpha1.DNSUpstreamPool{
@@ -194,18 +194,19 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 				configMap,
 			)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "1.1.1.1"`))
-			g.Expect(configMap.Data["config.json"]).NotTo(ContainSubstring(`"address": "9.9.9.9"`))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "9.9.9.9"`))
+			g.Expect(configMap.Data["config.json"]).NotTo(ContainSubstring(`"address": "1.1.1.1"`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 
 		Eventually(func(g Gomega) {
 			current := &v1alpha1.DNSUpstreamPool{}
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "zeta", Namespace: namespace}, current)
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "alpha", Namespace: namespace}, current)
 			g.Expect(err).NotTo(HaveOccurred())
 			condition := meta.FindStatusCondition(current.Status.Conditions, upstreamPoolReadyCondition)
 			g.Expect(condition).NotTo(BeNil())
 			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			g.Expect(condition.Reason).To(Equal(inactivePoolReason))
+			g.Expect(condition.Reason).To(Equal(supersededPoolReason))
+			g.Expect(condition.Message).To(ContainSubstring(`"zeta"`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 })

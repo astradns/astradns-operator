@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
@@ -33,7 +34,7 @@ const (
 	agentConfigMapNameEnv   = "ASTRADNS_AGENT_CONFIGMAP_NAME"
 	agentConfigKey          = "config.json"
 	defaultCacheProfileName = "default"
-	inactivePoolReason      = "InactivePool"
+	supersededPoolReason    = "Superseded"
 
 	upstreamPoolReadyCondition = "Ready"
 )
@@ -94,18 +95,13 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if poolCount > 1 {
 		if pool.Name != activePoolName {
-			message := fmt.Sprintf(
-				"pool %q is inactive because %q is selected as the active pool for namespace %q",
-				pool.Name,
-				activePoolName,
-				pool.Namespace,
-			)
-			r.recordEvent(&pool, corev1.EventTypeWarning, inactivePoolReason, message)
+			message := fmt.Sprintf("pool %q is active in this namespace", activePoolName)
+			r.recordEvent(&pool, corev1.EventTypeWarning, supersededPoolReason, message)
 			if statusErr := r.setReadyCondition(
 				ctx,
 				&pool,
 				metav1.ConditionFalse,
-				inactivePoolReason,
+				supersededPoolReason,
 				message,
 			); statusErr != nil {
 				return ctrl.Result{}, statusErr
@@ -260,13 +256,10 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 		return r.removeConfigKey(ctx, configNamespace)
 	}
 
-	// Sort by name for deterministic selection when multiple pools exist.
-	sort.Slice(pools.Items, func(i, j int) bool {
-		return pools.Items[i].Name < pools.Items[j].Name
-	})
+	sortPoolsForSelection(pools.Items)
 
 	if len(pools.Items) > 1 {
-		logger.Info("multiple DNSUpstreamPools in namespace, using first alphabetically",
+		logger.Info("multiple DNSUpstreamPools in namespace, using oldest pool",
 			"namespace", poolNamespace,
 			"selected", pools.Items[0].Name,
 			"count", len(pools.Items),
@@ -320,11 +313,28 @@ func (r *DNSUpstreamPoolReconciler) selectActivePoolName(ctx context.Context, na
 		return "", 0, nil
 	}
 
-	sort.Slice(pools.Items, func(i, j int) bool {
-		return pools.Items[i].Name < pools.Items[j].Name
-	})
+	sortPoolsForSelection(pools.Items)
 
 	return pools.Items[0].Name, len(pools.Items), nil
+}
+
+func sortPoolsForSelection(items []v1alpha1.DNSUpstreamPool) {
+	sort.Slice(items, func(i, j int) bool {
+		left := items[i].CreationTimestamp.Time
+		right := items[j].CreationTimestamp.Time
+
+		if !left.IsZero() && !right.IsZero() && !left.Equal(right) {
+			return left.Before(right)
+		}
+
+		leftRV, leftErr := strconv.ParseInt(items[i].ResourceVersion, 10, 64)
+		rightRV, rightErr := strconv.ParseInt(items[j].ResourceVersion, 10, 64)
+		if leftErr == nil && rightErr == nil && leftRV != rightRV {
+			return leftRV < rightRV
+		}
+
+		return items[i].Name < items[j].Name
+	})
 }
 
 func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespace, renderedConfig string) error {
