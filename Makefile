@@ -95,6 +95,46 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+# Integration test configuration (Kind + Helm + operator + agent full stack)
+INTEGRATION_KIND_CLUSTER ?= astradns-integration
+OPERATOR_IMG_INTEGRATION ?= astradns-operator:integration
+AGENT_IMG_INTEGRATION ?= astradns-agent:integration
+
+.PHONY: test-integration
+test-integration: ## Run full-stack integration tests (Kind + Helm + operator + agent).
+	go test -tags=integration ./test/integration/ -v -ginkgo.v -timeout 15m
+
+.PHONY: build-integration-images
+build-integration-images: ## Build operator and agent Docker images for integration tests.
+	$(CONTAINER_TOOL) build -f Dockerfile -t $(OPERATOR_IMG_INTEGRATION) ..
+	$(CONTAINER_TOOL) build -f ../astradns-agent/Dockerfile -t $(AGENT_IMG_INTEGRATION) ..
+
+# K8s version matrix — each entry is a Kind node image.
+# Update from: https://github.com/kubernetes-sigs/kind/releases
+K8S_VERSIONS ?= \
+	kindest/node:v1.33.0 \
+	kindest/node:v1.32.4 \
+	kindest/node:v1.31.6 \
+	kindest/node:v1.30.10
+
+.PHONY: test-integration-matrix
+test-integration-matrix: ## Run integration tests against multiple K8s versions.
+	@failed=""; \
+	for img in $(K8S_VERSIONS); do \
+		echo ""; \
+		echo "========================================"; \
+		echo "  Testing with $$img"; \
+		echo "========================================"; \
+		KIND_NODE_IMAGE=$$img go test -tags=integration ./test/integration/ -v -ginkgo.v -timeout 15m || failed="$$failed $$img"; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo ""; \
+		echo "FAILED on:$$failed"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "All K8s versions passed."
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run
