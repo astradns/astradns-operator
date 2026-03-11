@@ -20,6 +20,8 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/astradns/astradns-operator/controllers"
 	operatorconfig "github.com/astradns/astradns-operator/pkg/engineconfig"
@@ -52,6 +54,8 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+const enablePoolUniquenessWebhookEnv = "ASTRADNS_ENABLE_POOL_UNIQUENESS_WEBHOOK"
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -228,6 +232,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if isPoolUniquenessWebhookEnabled() {
+		if err = (&controllers.DNSUpstreamPoolUniquenessWebhook{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Unable to create webhook", "webhook", "DNSUpstreamPoolUniqueness")
+			os.Exit(1)
+		}
+		setupLog.Info("Enabled DNSUpstreamPool uniqueness validating webhook")
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -244,4 +256,14 @@ func main() {
 		setupLog.Error(err, "Failed to run manager")
 		os.Exit(1)
 	}
+}
+
+func isPoolUniquenessWebhookEnabled() bool {
+	value := strings.TrimSpace(os.Getenv(enablePoolUniquenessWebhookEnv))
+	if value == "" {
+		return false
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	return err == nil && parsed
 }
