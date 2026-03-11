@@ -45,6 +45,7 @@ log-common-errors=yes
 threads=2
 max-cache-entries=4096
 max-negative-ttl=20
+minimum-ttl-override=30
 max-cache-ttl=120
 forward-zones=.=1.1.1.1:53;8.8.8.8:5353
 allow-from=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`
@@ -134,6 +135,7 @@ log-common-errors=yes
 threads=2
 max-cache-entries=2048
 max-negative-ttl=20
+minimum-ttl-override=45
 max-cache-ttl=180
 forward-zones=.=1.1.1.1:53;8.8.8.8:5353
 allow-from=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`

@@ -49,6 +49,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: ASTRADNS_AGENT_CONFIGMAP_NAME
               value: {{ include "astradns.agent.configmap" . | quote }}
+            - name: ASTRADNS_ENGINE_TYPE
+              value: {{ .Values.agent.engineType | quote }}
           ports:
             - name: health
               containerPort: 8081
