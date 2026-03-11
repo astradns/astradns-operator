@@ -60,7 +60,7 @@ func (g *DefaultConfigGenerator) Generate(
 			return nil, fmt.Errorf("upstream at index %d has empty address", i)
 		}
 
-		port := int(upstream.Port)
+		port := upstream.Port
 		if port == 0 {
 			port = defaultUpstreamPort
 		}
@@ -76,21 +76,21 @@ func (g *DefaultConfigGenerator) Generate(
 	}
 
 	if profile.Spec.MaxEntries > 0 {
-		config.Cache.MaxEntries = int(profile.Spec.MaxEntries)
+		config.Cache.MaxEntries = profile.Spec.MaxEntries
 	}
 	if profile.Spec.PositiveTtl.MinSeconds > 0 {
-		config.Cache.PositiveTtlMin = int(profile.Spec.PositiveTtl.MinSeconds)
+		config.Cache.PositiveTtlMin = profile.Spec.PositiveTtl.MinSeconds
 	}
 	if profile.Spec.PositiveTtl.MaxSeconds > 0 {
-		config.Cache.PositiveTtlMax = int(profile.Spec.PositiveTtl.MaxSeconds)
+		config.Cache.PositiveTtlMax = profile.Spec.PositiveTtl.MaxSeconds
 	}
 	if profile.Spec.NegativeTtl.Seconds > 0 {
-		config.Cache.NegativeTtl = int(profile.Spec.NegativeTtl.Seconds)
+		config.Cache.NegativeTtl = profile.Spec.NegativeTtl.Seconds
 	}
 
 	config.Cache.PrefetchEnabled = profile.Spec.Prefetch.Enabled
 	if profile.Spec.Prefetch.Threshold > 0 {
-		config.Cache.PrefetchThreshold = int(profile.Spec.Prefetch.Threshold)
+		config.Cache.PrefetchThreshold = profile.Spec.Prefetch.Threshold
 	}
 
 	return config, nil
