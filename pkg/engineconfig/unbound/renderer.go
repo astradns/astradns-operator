@@ -27,7 +27,8 @@ func (r *UnboundRenderer) Render(config *engine.EngineConfig) (string, error) {
 		return "", errors.New("engine config is required")
 	}
 
-	data := engine.NewTemplateData(*config)
+	normalized := normalizeConfig(*config)
+	data := engine.NewTemplateData(normalized)
 	tmpl, err := template.New("unbound.conf").Parse(engine.UnboundConfigTemplate)
 	if err != nil {
 		return "", fmt.Errorf("parse unbound template: %w", err)
@@ -49,4 +50,18 @@ func (r *UnboundRenderer) EngineType() engine.EngineType {
 // ConfigFileName returns the Unbound config filename.
 func (r *UnboundRenderer) ConfigFileName() string {
 	return "unbound.conf"
+}
+
+func normalizeConfig(config engine.EngineConfig) engine.EngineConfig {
+	normalized := config
+	normalized.Upstreams = make([]engine.UpstreamConfig, len(config.Upstreams))
+	copy(normalized.Upstreams, config.Upstreams)
+
+	for i := range normalized.Upstreams {
+		if normalized.Upstreams[i].Port == 0 {
+			normalized.Upstreams[i].Port = 53
+		}
+	}
+
+	return normalized
 }

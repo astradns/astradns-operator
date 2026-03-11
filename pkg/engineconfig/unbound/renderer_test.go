@@ -99,6 +99,35 @@ func TestUnboundRendererRenderDefaults(t *testing.T) {
 	}
 }
 
+func TestUnboundRendererRenderDefaultUpstreamPort(t *testing.T) {
+	t.Parallel()
+
+	renderer := &UnboundRenderer{}
+	config := &engine.EngineConfig{
+		Upstreams: []engine.UpstreamConfig{{Address: "1.1.1.1"}},
+		Cache: engine.CacheConfig{
+			MaxEntries:     100000,
+			PositiveTtlMin: 60,
+			PositiveTtlMax: 300,
+			NegativeTtl:    30,
+		},
+		ListenAddr: "127.0.0.1",
+		ListenPort: 5354,
+	}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	if !strings.Contains(got, "forward-addr: 1.1.1.1") {
+		t.Fatalf("Render() output does not contain default upstream address\nfull output:\n%s", got)
+	}
+	if strings.Contains(got, "forward-addr: 1.1.1.1@0") {
+		t.Fatalf("Render() output should normalize upstream port 0 to 53\nfull output:\n%s", got)
+	}
+}
+
 func TestUnboundRendererRoundTrip(t *testing.T) {
 	t.Parallel()
 

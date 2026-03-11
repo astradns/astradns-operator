@@ -27,7 +27,8 @@ func (r *CoreDNSRenderer) Render(config *engine.EngineConfig) (string, error) {
 		return "", errors.New("engine config is required")
 	}
 
-	data := engine.NewTemplateData(*config)
+	normalized := normalizeConfig(*config)
+	data := engine.NewTemplateData(normalized)
 	tmpl, err := template.New("Corefile").Parse(engine.CorefileTemplate)
 	if err != nil {
 		return "", fmt.Errorf("parse coredns template: %w", err)
@@ -49,4 +50,18 @@ func (r *CoreDNSRenderer) EngineType() engine.EngineType {
 // ConfigFileName returns the CoreDNS config filename.
 func (r *CoreDNSRenderer) ConfigFileName() string {
 	return "Corefile"
+}
+
+func normalizeConfig(config engine.EngineConfig) engine.EngineConfig {
+	normalized := config
+	normalized.Upstreams = make([]engine.UpstreamConfig, len(config.Upstreams))
+	copy(normalized.Upstreams, config.Upstreams)
+
+	for i := range normalized.Upstreams {
+		if normalized.Upstreams[i].Port == 0 {
+			normalized.Upstreams[i].Port = 53
+		}
+	}
+
+	return normalized
 }
