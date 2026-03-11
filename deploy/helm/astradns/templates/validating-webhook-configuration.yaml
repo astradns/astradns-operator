@@ -1,0 +1,31 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "astradns.fullname" . }}-validating
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        namespace: {{ include "astradns.namespace" . }}
+        name: {{ include "astradns.fullname" . }}-webhook-service
+        path: /validate-dns-astradns-com-v1alpha1-dnsupstreampool
+      caBundle: {{ required "webhook.caBundle must be set when webhook.enabled=true" .Values.webhook.caBundle | quote }}
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: vdnsupstreampool.astradns.com
+    rules:
+      - apiGroups:
+          - dns.astradns.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+        resources:
+          - dnsupstreampools
+    sideEffects: None
+    timeoutSeconds: 5
+{{- end }}

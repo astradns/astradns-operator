@@ -84,6 +84,12 @@ serviceMonitor:
   # -- Scrape timeout
   scrapeTimeout: 10s
 
+webhook:
+  # -- Enable validating webhook that enforces one DNSUpstreamPool per namespace
+  enabled: false
+  # -- Base64-encoded CA bundle for the webhook server certificate
+  caBundle: ""
+
 grafana:
   dashboards:
     # -- Create a ConfigMap with the Grafana dashboard JSON for sidecar discovery

@@ -1,0 +1,11 @@
+- op: add
+  path: /spec/template/spec/containers/0/ports/-
+  value:
+    containerPort: 9443
+    name: webhook-server
+    protocol: TCP
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: ASTRADNS_ENABLE_POOL_UNIQUENESS_WEBHOOK
+    value: "true"

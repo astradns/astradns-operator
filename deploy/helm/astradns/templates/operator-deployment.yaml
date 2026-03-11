@@ -51,12 +51,17 @@ spec:
               value: {{ include "astradns.agent.configmap" . | quote }}
             - name: ASTRADNS_ENGINE_TYPE
               value: {{ .Values.agent.engineType | quote }}
+            - name: ASTRADNS_ENABLE_POOL_UNIQUENESS_WEBHOOK
+              value: {{ .Values.webhook.enabled | quote }}
           ports:
             - name: health
               containerPort: 8081
               protocol: TCP
             - name: metrics
               containerPort: 8443
+              protocol: TCP
+            - name: webhook-server
+              containerPort: 9443
               protocol: TCP
           livenessProbe:
             httpGet:
