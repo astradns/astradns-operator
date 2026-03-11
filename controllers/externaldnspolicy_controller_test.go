@@ -12,10 +12,18 @@ import (
 )
 
 var _ = Describe("ExternalDNSPolicy Controller", func() {
+	createDefaultProfile := func(namespace string) {
+		profile := &v1alpha1.DNSCacheProfile{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
+		}
+		Expect(k8sClient.Create(context.Background(), profile)).To(Succeed())
+	}
+
 	It("sets Validated=True when upstream pool exists", func() {
 		namespace := createNamespace("policy-valid")
 		poolName := "pool-a"
 		policyName := "policy-a"
+		createDefaultProfile(namespace)
 
 		pool := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
@@ -30,6 +38,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			Spec: v1alpha1.ExternalDNSPolicySpec{
 				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
 				UpstreamPoolRef: v1alpha1.ResourceRef{Name: poolName},
+				CacheProfileRef: v1alpha1.ResourceRef{Name: "default"},
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
@@ -47,12 +56,14 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 	It("sets Validated=False when upstream pool is missing", func() {
 		namespace := createNamespace("policy-missing")
 		policyName := "policy-missing"
+		createDefaultProfile(namespace)
 
 		policy := &v1alpha1.ExternalDNSPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: namespace},
 			Spec: v1alpha1.ExternalDNSPolicySpec{
 				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
 				UpstreamPoolRef: v1alpha1.ResourceRef{Name: "does-not-exist"},
+				CacheProfileRef: v1alpha1.ResourceRef{Name: "default"},
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
@@ -71,6 +82,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		namespace := createNamespace("policy-delete")
 		poolName := "pool-delete"
 		policyName := "policy-delete"
+		createDefaultProfile(namespace)
 
 		pool := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
@@ -85,6 +97,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			Spec: v1alpha1.ExternalDNSPolicySpec{
 				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
 				UpstreamPoolRef: v1alpha1.ResourceRef{Name: poolName},
+				CacheProfileRef: v1alpha1.ResourceRef{Name: "default"},
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
