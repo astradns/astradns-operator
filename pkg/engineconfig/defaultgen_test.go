@@ -41,7 +41,7 @@ func TestDefaultConfigGeneratorGenerateWithDefaults(t *testing.T) {
 			PositiveTtlMin:    60,
 			PositiveTtlMax:    300,
 			NegativeTtl:       30,
-			PrefetchEnabled:   false,
+			PrefetchEnabled:   true,
 			PrefetchThreshold: 10,
 		},
 		ListenAddr: "127.0.0.1",

@@ -16,6 +16,7 @@ const (
 	defaultPositiveTTLMin      = 60
 	defaultPositiveTTLMax      = 300
 	defaultNegativeTTL         = 30
+	defaultPrefetchEnabled     = true
 	defaultPrefetchThreshold   = 10
 	defaultEngineListenAddress = "127.0.0.1"
 	defaultEngineListeningPort = 5354
@@ -46,6 +47,7 @@ func (g *DefaultConfigGenerator) Generate(
 			PositiveTtlMin:    defaultPositiveTTLMin,
 			PositiveTtlMax:    defaultPositiveTTLMax,
 			NegativeTtl:       defaultNegativeTTL,
+			PrefetchEnabled:   defaultPrefetchEnabled,
 			PrefetchThreshold: defaultPrefetchThreshold,
 		},
 		ListenAddr: defaultEngineListenAddress,
