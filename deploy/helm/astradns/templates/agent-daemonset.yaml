@@ -54,9 +54,11 @@ spec:
           ports:
             - name: dns-udp
               containerPort: 5353
+              hostPort: 5353
               protocol: UDP
             - name: dns-tcp
               containerPort: 5353
+              hostPort: 5353
               protocol: TCP
             - name: metrics
               containerPort: 9153

@@ -40,43 +40,58 @@ spec:
             description: DNSCacheProfileSpec defines the desired state of DNSCacheProfile.
             properties:
               maxEntries:
+                default: 100000
                 description: MaxEntries is the maximum number of cache entries. Defaults
                   to 100000.
                 format: int32
+                minimum: 1
                 type: integer
               negativeTtl:
                 description: NegativeTtl configures TTL for negative responses (NXDOMAIN).
                 properties:
                   seconds:
+                    default: 30
                     description: Seconds is the TTL for negative cache entries. Defaults
                       to 30.
                     format: int32
+                    minimum: 1
                     type: integer
                 type: object
               positiveTtl:
                 description: PositiveTtl configures TTL bounds for successful responses.
                 properties:
                   maxSeconds:
+                    default: 300
                     description: MaxSeconds is the maximum TTL in seconds. Defaults
                       to 300.
                     format: int32
+                    minimum: 1
                     type: integer
                   minSeconds:
+                    default: 60
                     description: MinSeconds is the minimum TTL in seconds. Defaults
                       to 60.
                     format: int32
+                    minimum: 1
                     type: integer
                 type: object
+                x-kubernetes-validations:
+                - message: maxSeconds must be greater than or equal to minSeconds
+                  rule: self.maxSeconds == 0 || self.minSeconds == 0 || self.maxSeconds
+                    >= self.minSeconds
               prefetch:
                 description: Prefetch configures cache prefetching.
                 properties:
                   enabled:
+                    default: true
                     description: Enabled enables cache prefetching.
                     type: boolean
                   threshold:
+                    default: 10
                     description: Threshold is the number of queries before a record
                       is prefetched. Defaults to 10.
                     format: int32
+                    minimum: 1
                     type: integer
                 type: object
             type: object

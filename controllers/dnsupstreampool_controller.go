@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -33,6 +33,7 @@ const (
 	agentConfigMapNameEnv   = "ASTRADNS_AGENT_CONFIGMAP_NAME"
 	agentConfigKey          = "config.json"
 	defaultCacheProfileName = "default"
+	inactivePoolReason      = "InactivePool"
 
 	upstreamPoolReadyCondition = "Ready"
 )
@@ -43,7 +44,7 @@ type DNSUpstreamPoolReconciler struct {
 	Scheme         *runtime.Scheme
 	ConfigGen      typesengineconfig.ConfigGenerator
 	ConfigRenderer typesengineconfig.ConfigRenderer
-	Recorder       record.EventRecorder
+	Recorder       events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools,verbs=get;list;watch;update;patch
@@ -74,10 +75,51 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := validateDNSUpstreamPool(&pool); err != nil {
 		logger.Error(err, "Invalid DNSUpstreamPool spec")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "InvalidSpec", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "InvalidSpec", err.Error()); statusErr != nil {
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"InvalidSpec",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
+	}
+
+	activePoolName, poolCount, err := r.selectActivePoolName(ctx, pool.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if poolCount > 1 {
+		if pool.Name != activePoolName {
+			message := fmt.Sprintf(
+				"pool %q is inactive because %q is selected as the active pool for namespace %q",
+				pool.Name,
+				activePoolName,
+				pool.Namespace,
+			)
+			r.recordEvent(&pool, corev1.EventTypeWarning, inactivePoolReason, message)
+			if statusErr := r.setReadyCondition(
+				ctx,
+				&pool,
+				metav1.ConditionFalse,
+				inactivePoolReason,
+				message,
+			); statusErr != nil {
+				return ctrl.Result{}, statusErr
+			}
+			return ctrl.Result{}, nil
+		}
+
+		logger.Info(
+			"multiple DNSUpstreamPools detected, reconciling active pool",
+			"active_pool",
+			activePoolName,
+			"count",
+			poolCount,
+		)
 	}
 
 	profile, err := r.getDefaultCacheProfile(ctx, pool.Namespace)
@@ -85,7 +127,13 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err = fmt.Errorf("get default DNSCacheProfile: %w", err)
 		logger.Error(err, "Could not fetch default cache profile")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "ProfileLookupFailed", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "ProfileLookupFailed", err.Error()); statusErr != nil {
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"ProfileLookupFailed",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, err
@@ -96,7 +144,13 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err = fmt.Errorf("generate engine config: %w", err)
 		logger.Error(err, "Could not generate engine configuration")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "ConfigGenerationFailed", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "ConfigGenerationFailed", err.Error()); statusErr != nil {
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"ConfigGenerationFailed",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
@@ -107,7 +161,13 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err = fmt.Errorf("validate engine config: %w", err)
 		logger.Error(err, "Config validation failed")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "ValidationFailed", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "ValidationFailed", err.Error()); statusErr != nil {
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"ValidationFailed",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
@@ -119,7 +179,13 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err = fmt.Errorf("marshal engine config: %w", err)
 		logger.Error(err, "Could not marshal engine configuration to JSON")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "MarshalFailed", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "MarshalFailed", err.Error()); statusErr != nil {
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"MarshalFailed",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
@@ -129,14 +195,26 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err = fmt.Errorf("upsert configmap: %w", err)
 		logger.Error(err, "Could not update config map")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "ConfigMapUpdateFailed", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "ConfigMapUpdateFailed", err.Error()); statusErr != nil {
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"ConfigMapUpdateFailed",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, err
 	}
 
 	r.recordEvent(&pool, corev1.EventTypeNormal, "ConfigRendered", "Rendered engine configuration")
-	if err := r.setReadyCondition(ctx, &pool, metav1.ConditionTrue, "Ready", "Configuration rendered successfully"); err != nil {
+	if err := r.setReadyCondition(
+		ctx,
+		&pool,
+		metav1.ConditionTrue,
+		"Ready",
+		"Configuration rendered successfully",
+	); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -215,7 +293,38 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 		return fmt.Errorf("marshal config from remaining pool: %w", err)
 	}
 
-	return r.upsertConfigMap(ctx, configNamespace, string(configJSON))
+	if err := r.upsertConfigMap(ctx, configNamespace, string(configJSON)); err != nil {
+		return err
+	}
+
+	if err := r.setReadyCondition(
+		ctx,
+		&pools.Items[0],
+		metav1.ConditionTrue,
+		"Ready",
+		"Configuration rendered successfully",
+	); err != nil {
+		return fmt.Errorf("update remaining pool status: %w", err)
+	}
+
+	return nil
+}
+
+func (r *DNSUpstreamPoolReconciler) selectActivePoolName(ctx context.Context, namespace string) (string, int, error) {
+	var pools v1alpha1.DNSUpstreamPoolList
+	if err := r.List(ctx, &pools, client.InNamespace(namespace)); err != nil {
+		return "", 0, fmt.Errorf("list DNSUpstreamPools in namespace %q: %w", namespace, err)
+	}
+
+	if len(pools.Items) == 0 {
+		return "", 0, nil
+	}
+
+	sort.Slice(pools.Items, func(i, j int) bool {
+		return pools.Items[i].Name < pools.Items[j].Name
+	})
+
+	return pools.Items[0].Name, len(pools.Items), nil
 }
 
 func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespace, renderedConfig string) error {
@@ -269,7 +378,10 @@ func (r *DNSUpstreamPoolReconciler) removeConfigKey(ctx context.Context, namespa
 	return nil
 }
 
-func (r *DNSUpstreamPoolReconciler) getDefaultCacheProfile(ctx context.Context, namespace string) (*v1alpha1.DNSCacheProfile, error) {
+func (r *DNSUpstreamPoolReconciler) getDefaultCacheProfile(
+	ctx context.Context,
+	namespace string,
+) (*v1alpha1.DNSCacheProfile, error) {
 	profile := &v1alpha1.DNSCacheProfile{}
 	err := r.Get(ctx, types.NamespacedName{Name: defaultCacheProfileName, Namespace: namespace}, profile)
 	if err != nil {
@@ -316,8 +428,8 @@ func validateDNSUpstreamPool(pool *v1alpha1.DNSUpstreamPool) error {
 		if !isValidUpstreamAddress(upstream.Address) {
 			return fmt.Errorf("spec.upstreams[%d].address %q is not a valid IP or DNS name", i, upstream.Address)
 		}
-		if upstream.Port < 0 || upstream.Port > 65535 {
-			return fmt.Errorf("spec.upstreams[%d].port must be between 0 and 65535", i)
+		if upstream.Port <= 0 || upstream.Port > 65535 {
+			return fmt.Errorf("spec.upstreams[%d].port must be between 1 and 65535", i)
 		}
 	}
 
@@ -355,7 +467,7 @@ func (r *DNSUpstreamPoolReconciler) recordEvent(object *v1alpha1.DNSUpstreamPool
 	if r.Recorder == nil {
 		return
 	}
-	r.Recorder.Event(object, eventType, reason, message)
+	r.Recorder.Eventf(object, nil, eventType, reason, "Reconcile", "%s", message)
 }
 
 var _ reconcile.Reconciler = (*DNSUpstreamPoolReconciler)(nil)

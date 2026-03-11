@@ -28,7 +28,10 @@ type DefaultConfigGenerator struct{}
 var _ typesengineconfig.ConfigGenerator = (*DefaultConfigGenerator)(nil)
 
 // Generate maps CRD fields to EngineConfig, applying defaults for empty fields.
-func (g *DefaultConfigGenerator) Generate(pool *v1alpha1.DNSUpstreamPool, profile *v1alpha1.DNSCacheProfile) (*engine.EngineConfig, error) {
+func (g *DefaultConfigGenerator) Generate(
+	pool *v1alpha1.DNSUpstreamPool,
+	profile *v1alpha1.DNSCacheProfile,
+) (*engine.EngineConfig, error) {
 	if pool == nil {
 		return nil, errors.New("dns upstream pool is required")
 	}

@@ -1,18 +1,23 @@
 # Build the manager binary
-FROM golang:1.26 AS builder
+FROM golang:1.26.1 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
+COPY astradns-operator/go.mod astradns-operator/go.mod
+COPY astradns-operator/go.sum astradns-operator/go.sum
+COPY astradns-types/go.mod astradns-types/go.mod
+COPY astradns-types/go.sum astradns-types/go.sum
+
+WORKDIR /workspace/astradns-operator
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
 
 # Copy the Go source (relies on .dockerignore to filter)
-COPY . .
+COPY astradns-operator /workspace/astradns-operator
+COPY astradns-types /workspace/astradns-types
 
 # Build
 # the GOARCH has no default value to allow the binary to be built according to the host where the command
@@ -25,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/astradns-operator/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

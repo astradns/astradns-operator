@@ -82,19 +82,19 @@ var _ = BeforeSuite(func() {
 		Scheme:         mgr.GetScheme(),
 		ConfigGen:      configGen,
 		ConfigRenderer: configRenderer,
-		Recorder:       mgr.GetEventRecorderFor("dnsupstreampool-controller-test"),
+		Recorder:       mgr.GetEventRecorder("dnsupstreampool-controller-test"),
 	}).SetupWithManager(mgr)).To(Succeed())
 
 	Expect((&DNSCacheProfileReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("dnscacheprofile-controller-test"),
+		Recorder: mgr.GetEventRecorder("dnscacheprofile-controller-test"),
 	}).SetupWithManager(mgr)).To(Succeed())
 
 	Expect((&ExternalDNSPolicyReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("externaldnspolicy-controller-test"),
+		Recorder: mgr.GetEventRecorder("externaldnspolicy-controller-test"),
 	}).SetupWithManager(mgr)).To(Succeed())
 
 	managerCtx, cancel := context.WithCancel(context.Background())

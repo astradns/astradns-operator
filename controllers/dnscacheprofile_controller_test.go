@@ -39,7 +39,7 @@ var _ = Describe("DNSCacheProfile Controller", func() {
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
-	It("sets Active=False when TTL range is invalid", func() {
+	It("rejects profiles with invalid TTL range at CRD validation", func() {
 		namespace := createNamespace("cache-invalid")
 		profileName := "invalid-ttl"
 
@@ -52,15 +52,6 @@ var _ = Describe("DNSCacheProfile Controller", func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(context.Background(), profile)).To(Succeed())
-
-		Eventually(func(g Gomega) {
-			current := &v1alpha1.DNSCacheProfile{}
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: profileName, Namespace: namespace}, current)
-			g.Expect(err).NotTo(HaveOccurred())
-			condition := meta.FindStatusCondition(current.Status.Conditions, cacheProfileActiveCondition)
-			g.Expect(condition).NotTo(BeNil())
-			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+		Expect(k8sClient.Create(context.Background(), profile)).NotTo(Succeed())
 	})
 })

@@ -1,13 +1,14 @@
 {{- if .Values.crds.install }}
 ---
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  labels:
+    {{- include "astradns.labels" . | nindent 4 }}
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
   name: dnsupstreampools.dns.astradns.com
-  labels:
-    {{- include "astradns.labels" . | nindent 4 }}
 spec:
   group: dns.astradns.com
   names:
@@ -46,23 +47,30 @@ spec:
                 description: HealthCheck configures health checking for upstreams.
                 properties:
                   enabled:
+                    default: true
                     description: Enabled enables periodic health checks. Defaults
                       to true.
                     type: boolean
                   failureThreshold:
+                    default: 3
                     description: FailureThreshold is the number of consecutive failures
                       before marking unhealthy. Defaults to 3.
                     format: int32
+                    minimum: 1
                     type: integer
                   intervalSeconds:
+                    default: 30
                     description: IntervalSeconds is the time between health checks.
                       Defaults to 30.
                     format: int32
+                    minimum: 1
                     type: integer
                   timeoutSeconds:
+                    default: 5
                     description: TimeoutSeconds is the health check timeout. Defaults
                       to 5.
                     format: int32
+                    minimum: 1
                     type: integer
                 type: object
               loadBalancing:
@@ -70,8 +78,13 @@ spec:
                   across upstreams.
                 properties:
                   strategy:
+                    default: round-robin
                     description: 'Strategy is the load balancing algorithm: round-robin,
                       first-available, or random.'
+                    enum:
+                    - round-robin
+                    - first-available
+                    - random
                     type: string
                 type: object
               upstreams:
@@ -82,15 +95,20 @@ spec:
                     address:
                       description: Address is the IP address or hostname of the upstream
                         resolver.
+                      minLength: 1
                       type: string
                     port:
+                      default: 53
                       description: Port is the port number of the upstream resolver.
                         Defaults to 53.
                       format: int32
+                      maximum: 65535
+                      minimum: 1
                       type: integer
                   required:
                   - address
                   type: object
+                minItems: 1
                 type: array
             required:
             - upstreams

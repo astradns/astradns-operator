@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -29,7 +29,7 @@ const (
 type DNSCacheProfileReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnscacheprofiles,verbs=get;list;watch;update;patch
@@ -51,14 +51,26 @@ func (r *DNSCacheProfileReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := validateDNSCacheProfile(&profile); err != nil {
 		logger.Error(err, "Invalid DNSCacheProfile spec")
 		r.recordEvent(&profile, corev1.EventTypeWarning, "InvalidSpec", err.Error())
-		if statusErr := r.setActiveCondition(ctx, &profile, metav1.ConditionFalse, "InvalidSpec", err.Error()); statusErr != nil {
+		if statusErr := r.setActiveCondition(
+			ctx,
+			&profile,
+			metav1.ConditionFalse,
+			"InvalidSpec",
+			err.Error(),
+		); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
 	}
 
 	r.recordEvent(&profile, corev1.EventTypeNormal, "Validated", "Validated DNSCacheProfile")
-	if err := r.setActiveCondition(ctx, &profile, metav1.ConditionTrue, "Active", "DNSCacheProfile is active"); err != nil {
+	if err := r.setActiveCondition(
+		ctx,
+		&profile,
+		metav1.ConditionTrue,
+		"Active",
+		"DNSCacheProfile is active",
+	); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -135,7 +147,7 @@ func (r *DNSCacheProfileReconciler) recordEvent(object *v1alpha1.DNSCacheProfile
 	if r.Recorder == nil {
 		return
 	}
-	r.Recorder.Event(object, eventType, reason, message)
+	r.Recorder.Eventf(object, nil, eventType, reason, "Reconcile", "%s", message)
 }
 
 var _ reconcile.Reconciler = (*DNSCacheProfileReconciler)(nil)

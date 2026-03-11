@@ -20,7 +20,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		pool := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
 			Spec: v1alpha1.DNSUpstreamPoolSpec{
-				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1"}},
+				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), pool)).To(Succeed())
@@ -75,7 +75,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		pool := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
 			Spec: v1alpha1.DNSUpstreamPoolSpec{
-				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1"}},
+				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), pool)).To(Succeed())

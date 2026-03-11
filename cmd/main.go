@@ -204,7 +204,7 @@ func main() {
 		Scheme:         mgr.GetScheme(),
 		ConfigGen:      configGen,
 		ConfigRenderer: configRenderer,
-		Recorder:       mgr.GetEventRecorderFor("dnsupstreampool-controller"),
+		Recorder:       mgr.GetEventRecorder("dnsupstreampool-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "DNSUpstreamPool")
 		os.Exit(1)
@@ -213,7 +213,7 @@ func main() {
 	if err = (&controllers.DNSCacheProfileReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("dnscacheprofile-controller"),
+		Recorder: mgr.GetEventRecorder("dnscacheprofile-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "DNSCacheProfile")
 		os.Exit(1)
@@ -222,7 +222,7 @@ func main() {
 	if err = (&controllers.ExternalDNSPolicyReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("externaldnspolicy-controller"),
+		Recorder: mgr.GetEventRecorder("externaldnspolicy-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ExternalDNSPolicy")
 		os.Exit(1)
