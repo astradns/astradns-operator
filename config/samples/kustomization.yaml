@@ -1,0 +1,4 @@
+resources:
+- dns_v1alpha1_dnscacheprofile.yaml
+- dns_v1alpha1_dnsupstreampool.yaml
+- dns_v1alpha1_externaldnspolicy.yaml

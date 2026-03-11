@@ -1,0 +1,15 @@
+apiVersion: dns.astradns.com/v1alpha1
+kind: DNSCacheProfile
+metadata:
+  name: default
+  namespace: astradns-operator-system
+spec:
+  maxEntries: 100000
+  positiveTtl:
+    minSeconds: 60
+    maxSeconds: 300
+  negativeTtl:
+    seconds: 30
+  prefetch:
+    enabled: true
+    threshold: 10

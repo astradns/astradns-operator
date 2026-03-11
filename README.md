@@ -33,8 +33,15 @@ CRD changes --> Reconciler --> EngineConfig assembly
 1. The operator watches `DNSUpstreamPool`, `DNSCacheProfile`, and `ExternalDNSPolicy` resources.
 2. On change, the reconciler assembles an `EngineConfig` from the current state of all relevant CRs.
 3. The appropriate `ConfigRenderer` (selected by `ASTRADNS_ENGINE_TYPE`) validates and renders the config.
-4. The rendered JSON is written to a ConfigMap in the `astradns-system` namespace.
+4. The rendered JSON is written to the `astradns-agent-config` ConfigMap in the operator namespace.
 5. The agent's config watcher detects the ConfigMap update and reloads the engine subprocess.
+
+## Runtime Contract With Agent
+
+- ConfigMap name: `astradns-agent-config`
+- ConfigMap key: `config.json`
+- Operator namespace is passed to controllers via `POD_NAMESPACE` (set in `config/manager/manager.yaml`).
+- Agent should be deployed in the same namespace so it can mount this ConfigMap directly.
 
 ## Engine Selection
 
@@ -55,6 +62,12 @@ make install
 
 # Deploy the operator
 make deploy IMG=<registry>/astradns-operator:<tag>
+
+# Deploy the agent DaemonSet in the same namespace
+kubectl apply -f ../astradns-agent/config/daemonset.yaml
+
+# Apply sample CRs
+kubectl apply -k config/samples/
 ```
 
 ## Uninstall
@@ -82,6 +95,12 @@ make test
 # Run static analysis
 make vet
 ```
+
+## Contribution Policy
+
+- Human and AI contributions: `CONTRIBUTING.md`
+- OpenCode-specific guardrails: `OPENCODE_RULES.md`
+- Repository-level AI constraints: `AGENTS.md`
 
 ## License
 

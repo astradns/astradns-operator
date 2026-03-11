@@ -1,0 +1,13 @@
+apiVersion: dns.astradns.com/v1alpha1
+kind: ExternalDNSPolicy
+metadata:
+  name: default
+  namespace: astradns-operator-system
+spec:
+  selector:
+    namespaces:
+    - default
+  upstreamPoolRef:
+    name: default
+  cacheProfileRef:
+    name: default

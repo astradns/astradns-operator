@@ -1,0 +1,10 @@
+apiVersion: dns.astradns.com/v1alpha1
+kind: DNSUpstreamPool
+metadata:
+  name: default
+  namespace: astradns-operator-system
+spec:
+  upstreams:
+  - address: 1.1.1.1
+  - address: 8.8.8.8
+    port: 53
