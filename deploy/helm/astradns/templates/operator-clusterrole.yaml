@@ -40,7 +40,6 @@ rules:
       - watch
       - create
       - update
-      - patch
   # Event recording
   - apiGroups:
       - ""

@@ -1,35 +1,45 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    app.kubernetes.io/name: astradns-operator
-    app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-# CRD resources
-- apiGroups: ["dns.astradns.com"]
-  resources: ["dnsupstreampools"]
-  verbs: ["get", "list", "watch", "update", "patch"]
-- apiGroups: ["dns.astradns.com"]
-  resources: ["dnsupstreampools/status"]
-  verbs: ["get", "update", "patch"]
-- apiGroups: ["dns.astradns.com"]
-  resources: ["dnscacheprofiles"]
-  verbs: ["get", "list", "watch", "update", "patch"]
-- apiGroups: ["dns.astradns.com"]
-  resources: ["dnscacheprofiles/status"]
-  verbs: ["get", "update", "patch"]
-- apiGroups: ["dns.astradns.com"]
-  resources: ["externaldnspolicies"]
-  verbs: ["get", "list", "watch", "update", "patch"]
-- apiGroups: ["dns.astradns.com"]
-  resources: ["externaldnspolicies/status"]
-  verbs: ["get", "update", "patch"]
-# ConfigMap management
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
-# Events
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - dns.astradns.com
+  resources:
+  - dnscacheprofiles
+  - dnsupstreampools
+  - externaldnspolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dns.astradns.com
+  resources:
+  - dnscacheprofiles/status
+  - dnsupstreampools/status
+  - externaldnspolicies/status
+  verbs:
+  - get
+  - patch
+  - update

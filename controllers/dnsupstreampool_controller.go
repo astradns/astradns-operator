@@ -51,7 +51,7 @@ type DNSUpstreamPoolReconciler struct {
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnscacheprofiles,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile reconciles DNSUpstreamPool resources and writes rendered engine config to a ConfigMap.
