@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -270,15 +271,331 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should create ConfigMap with correct JSON when a DNSUpstreamPool is applied", func() {
+			poolName := "test-pool-configmap"
+
+			By("applying a DNSUpstreamPool CR")
+			poolYAML := fmt.Sprintf(`apiVersion: dns.astradns.com/v1alpha1
+kind: DNSUpstreamPool
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  upstreams:
+  - address: "1.1.1.1"
+    port: 53
+  - address: "8.8.8.8"
+    port: 53
+  healthCheck:
+    enabled: true
+    intervalSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  loadBalancing:
+    strategy: round-robin`, poolName, namespace)
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(poolYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply DNSUpstreamPool CR")
+
+			By("verifying ConfigMap astradns-agent-config exists with config.json key")
+			verifyConfigMap := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "astradns-agent-config",
+					"-n", namespace,
+					"-o", "jsonpath={.data.config\\.json}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "ConfigMap astradns-agent-config should exist")
+				g.Expect(output).NotTo(BeEmpty(), "config.json key should not be empty")
+
+				// Verify the JSON contains the upstream addresses
+				g.Expect(output).To(ContainSubstring("1.1.1.1"),
+					"config.json should contain upstream address 1.1.1.1")
+				g.Expect(output).To(ContainSubstring("8.8.8.8"),
+					"config.json should contain upstream address 8.8.8.8")
+
+				// Verify the JSON is valid
+				var config map[string]interface{}
+				g.Expect(json.Unmarshal([]byte(output), &config)).To(Succeed(),
+					"config.json should be valid JSON")
+			}
+			Eventually(verifyConfigMap, time.Minute).Should(Succeed())
+
+			By("verifying the pool status has Ready=True condition")
+			verifyPoolReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+					"-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"), "DNSUpstreamPool should have Ready=True condition")
+			}
+			Eventually(verifyPoolReady, time.Minute).Should(Succeed())
+
+			By("cleaning up the DNSUpstreamPool")
+			cmd = exec.Command("kubectl", "delete",
+				fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+				"-n", namespace, "--ignore-not-found")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete DNSUpstreamPool")
+		})
+
+		It("should include cache configuration when DNSCacheProfile and DNSUpstreamPool are applied together", func() {
+			profileName := "default"
+			poolName := "test-pool-cache"
+
+			By("applying a DNSCacheProfile named 'default'")
+			profileYAML := fmt.Sprintf(`apiVersion: dns.astradns.com/v1alpha1
+kind: DNSCacheProfile
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  maxEntries: 100000
+  positiveTtl:
+    minSeconds: 60
+    maxSeconds: 300
+  negativeTtl:
+    seconds: 30
+  prefetch:
+    enabled: true
+    threshold: 10`, profileName, namespace)
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(profileYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply DNSCacheProfile CR")
+
+			By("applying a DNSUpstreamPool CR")
+			poolYAML := fmt.Sprintf(`apiVersion: dns.astradns.com/v1alpha1
+kind: DNSUpstreamPool
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  upstreams:
+  - address: "1.1.1.1"
+    port: 53
+  healthCheck:
+    enabled: true
+    intervalSeconds: 30
+  loadBalancing:
+    strategy: round-robin`, poolName, namespace)
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(poolYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply DNSUpstreamPool CR")
+
+			By("verifying ConfigMap contains cache configuration from the profile")
+			verifyConfigWithCache := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "astradns-agent-config",
+					"-n", namespace,
+					"-o", "jsonpath={.data.config\\.json}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "ConfigMap astradns-agent-config should exist")
+				g.Expect(output).NotTo(BeEmpty(), "config.json key should not be empty")
+
+				// Parse the JSON to verify cache fields are populated from the profile
+				var config map[string]interface{}
+				g.Expect(json.Unmarshal([]byte(output), &config)).To(Succeed(),
+					"config.json should be valid JSON")
+
+				cacheRaw, hasCacheKey := config["cache"]
+				g.Expect(hasCacheKey).To(BeTrue(), "config.json should contain a 'cache' section")
+
+				cacheMap, ok := cacheRaw.(map[string]interface{})
+				g.Expect(ok).To(BeTrue(), "'cache' should be a JSON object")
+
+				// Verify cache values match the DNSCacheProfile spec
+				g.Expect(cacheMap["maxEntries"]).To(BeNumerically("==", 100000),
+					"maxEntries should match DNSCacheProfile spec")
+				g.Expect(cacheMap["positiveTtlMin"]).To(BeNumerically("==", 60),
+					"positiveTtlMin should match DNSCacheProfile spec")
+				g.Expect(cacheMap["positiveTtlMax"]).To(BeNumerically("==", 300),
+					"positiveTtlMax should match DNSCacheProfile spec")
+				g.Expect(cacheMap["negativeTtl"]).To(BeNumerically("==", 30),
+					"negativeTtl should match DNSCacheProfile spec")
+				g.Expect(cacheMap["prefetchEnabled"]).To(BeTrue(),
+					"prefetchEnabled should match DNSCacheProfile spec")
+				g.Expect(cacheMap["prefetchThreshold"]).To(BeNumerically("==", 10),
+					"prefetchThreshold should match DNSCacheProfile spec")
+			}
+			Eventually(verifyConfigWithCache, time.Minute).Should(Succeed())
+
+			By("cleaning up the DNSUpstreamPool and DNSCacheProfile")
+			cmd = exec.Command("kubectl", "delete",
+				fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+				"-n", namespace, "--ignore-not-found")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete DNSUpstreamPool")
+
+			cmd = exec.Command("kubectl", "delete",
+				fmt.Sprintf("dnscacheprofiles.dns.astradns.com/%s", profileName),
+				"-n", namespace, "--ignore-not-found")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete DNSCacheProfile")
+		})
+
+		It("should remove config.json key from ConfigMap when the pool is deleted", func() {
+			poolName := "test-pool-deletion"
+
+			By("applying a DNSUpstreamPool CR")
+			poolYAML := fmt.Sprintf(`apiVersion: dns.astradns.com/v1alpha1
+kind: DNSUpstreamPool
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  upstreams:
+  - address: "9.9.9.9"
+    port: 53
+  healthCheck:
+    enabled: true
+  loadBalancing:
+    strategy: round-robin`, poolName, namespace)
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(poolYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply DNSUpstreamPool CR")
+
+			By("waiting for ConfigMap to appear with config.json")
+			verifyConfigExists := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "astradns-agent-config",
+					"-n", namespace,
+					"-o", "jsonpath={.data.config\\.json}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "ConfigMap should exist")
+				g.Expect(output).NotTo(BeEmpty(), "config.json should not be empty")
+			}
+			Eventually(verifyConfigExists, time.Minute).Should(Succeed())
+
+			By("deleting the DNSUpstreamPool")
+			cmd = exec.Command("kubectl", "delete",
+				fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+				"-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete DNSUpstreamPool")
+
+			By("verifying ConfigMap still exists but config.json key is removed")
+			verifyConfigKeyRemoved := func(g Gomega) {
+				// Verify ConfigMap still exists
+				cmd := exec.Command("kubectl", "get", "configmap", "astradns-agent-config",
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "ConfigMap should still exist after pool deletion")
+
+				// Verify config.json key is removed (empty output means key does not exist)
+				cmd = exec.Command("kubectl", "get", "configmap", "astradns-agent-config",
+					"-n", namespace,
+					"-o", "jsonpath={.data.config\\.json}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty(),
+					"config.json key should be removed after pool deletion")
+			}
+			Eventually(verifyConfigKeyRemoved, time.Minute).Should(Succeed())
+		})
+
+		It("should set Ready=False with reason InvalidSpec when pool has empty upstreams", func() {
+			poolName := "test-pool-invalid"
+
+			By("applying a DNSUpstreamPool with empty upstreams list")
+			poolYAML := fmt.Sprintf(`apiVersion: dns.astradns.com/v1alpha1
+kind: DNSUpstreamPool
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  upstreams: []
+  healthCheck:
+    enabled: true
+  loadBalancing:
+    strategy: round-robin`, poolName, namespace)
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(poolYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply invalid DNSUpstreamPool CR")
+
+			By("verifying the pool status has Ready=False with reason InvalidSpec")
+			verifyPoolInvalid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+					"-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
+				statusOutput, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(statusOutput).To(Equal("False"),
+					"DNSUpstreamPool with empty upstreams should have Ready=False")
+
+				cmd = exec.Command("kubectl", "get",
+					fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+					"-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].reason}")
+				reasonOutput, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(reasonOutput).To(Equal("InvalidSpec"),
+					"Ready condition reason should be InvalidSpec")
+			}
+			Eventually(verifyPoolInvalid, time.Minute).Should(Succeed())
+
+			By("cleaning up the invalid DNSUpstreamPool")
+			cmd = exec.Command("kubectl", "delete",
+				fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+				"-n", namespace, "--ignore-not-found")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete invalid DNSUpstreamPool")
+		})
+
+		It("should record successful reconciliation metrics for DNSUpstreamPool", func() {
+			poolName := "test-pool-metrics"
+
+			By("applying a DNSUpstreamPool CR")
+			poolYAML := fmt.Sprintf(`apiVersion: dns.astradns.com/v1alpha1
+kind: DNSUpstreamPool
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  upstreams:
+  - address: "1.0.0.1"
+    port: 53
+  healthCheck:
+    enabled: true
+  loadBalancing:
+    strategy: round-robin`, poolName, namespace)
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(poolYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply DNSUpstreamPool CR")
+
+			By("waiting for reconciliation to complete (pool becomes Ready)")
+			verifyPoolReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+					"-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"), "Pool should be Ready before checking metrics")
+			}
+			Eventually(verifyPoolReady, time.Minute).Should(Succeed())
+
+			By("verifying reconciliation metrics contain successful dnsupstreampool reconcile count")
+			verifyReconcileMetrics := func(g Gomega) {
+				metricsOutput, err := getMetricsOutput()
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve metrics output")
+				g.Expect(metricsOutput).To(ContainSubstring(
+					`controller_runtime_reconcile_total{controller="dnsupstreampool",result="success"}`),
+					"Metrics should contain successful reconcile count for dnsupstreampool controller")
+			}
+			Eventually(verifyReconcileMetrics, 2*time.Minute).Should(Succeed())
+
+			By("cleaning up the DNSUpstreamPool")
+			cmd = exec.Command("kubectl", "delete",
+				fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
+				"-n", namespace, "--ignore-not-found")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete DNSUpstreamPool")
+		})
 	})
 })
 

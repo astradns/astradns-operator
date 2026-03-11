@@ -1,0 +1,62 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "astradns.fullname" . }}-operator
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+rules:
+  # CRD read/watch/update permissions
+  - apiGroups:
+      - dns.astradns.com
+    resources:
+      - dnsupstreampools
+      - dnscacheprofiles
+      - externaldnspolicies
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # CRD status subresource
+  - apiGroups:
+      - dns.astradns.com
+    resources:
+      - dnsupstreampools/status
+      - dnscacheprofiles/status
+      - externaldnspolicies/status
+    verbs:
+      - get
+      - update
+      - patch
+  # CRD finalizers
+  - apiGroups:
+      - dns.astradns.com
+    resources:
+      - dnsupstreampools/finalizers
+      - dnscacheprofiles/finalizers
+      - externaldnspolicies/finalizers
+    verbs:
+      - update
+  # ConfigMap management (agent config)
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+  # Event recording
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch

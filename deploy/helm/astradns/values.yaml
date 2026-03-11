@@ -1,0 +1,92 @@
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+# -- Namespace to deploy into (defaults to .Release.Namespace)
+namespace: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+operator:
+  image:
+    repository: astradns/operator
+    tag: ""  # Defaults to appVersion
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # -- Enable leader election for HA operator deployments
+  leaderElect: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  # -- Node selector for operator pods
+  nodeSelector: {}
+  # -- Tolerations for operator pods
+  tolerations: []
+  # -- Affinity rules for operator pods
+  affinity: {}
+  # -- Additional labels for operator pods
+  podLabels: {}
+  # -- Additional annotations for operator pods
+  podAnnotations: {}
+  serviceAccount:
+    # -- Annotations for the operator service account
+    annotations: {}
+
+agent:
+  image:
+    repository: astradns/agent
+    tag: ""  # Defaults to appVersion
+    pullPolicy: IfNotPresent
+  # -- DNS engine type: unbound, coredns, or powerdns
+  engineType: unbound
+  # -- Log mode: sampled or full
+  logMode: sampled
+  # -- Log sample rate when logMode is sampled
+  logSampleRate: "0.1"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  # -- Node selector for agent pods
+  nodeSelector: {}
+  # -- Tolerations for agent pods
+  tolerations: []
+  # -- Affinity rules for agent pods (anti-affinity is implicit via DaemonSet)
+  affinity: {}
+  # -- Additional labels for agent pods
+  podLabels: {}
+  # -- Additional annotations for agent pods
+  podAnnotations: {}
+  serviceAccount:
+    # -- Annotations for the agent service account
+    annotations: {}
+
+crds:
+  # -- Install CRDs with the chart
+  install: true
+
+serviceMonitor:
+  # -- Create a ServiceMonitor for Prometheus Operator
+  enabled: false
+  # -- Additional labels for the ServiceMonitor
+  labels: {}
+  # -- Scrape interval
+  interval: 30s
+  # -- Scrape timeout
+  scrapeTimeout: 10s
+
+grafana:
+  dashboards:
+    # -- Create a ConfigMap with the Grafana dashboard JSON for sidecar discovery
+    enabled: false
+    # -- Additional labels for the dashboard ConfigMap
+    labels: {}
