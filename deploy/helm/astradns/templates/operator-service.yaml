@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astradns.fullname" . }}-operator-metrics
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "astradns.operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: https
+      port: 8443
+      targetPort: metrics
+      protocol: TCP
