@@ -87,8 +87,14 @@ serviceMonitor:
 webhook:
   # -- Enable validating webhook that enforces one DNSUpstreamPool per namespace
   enabled: false
-  # -- Base64-encoded CA bundle for the webhook server certificate
-  caBundle: ""
+  certManager:
+    issuerRef:
+      # -- Existing Issuer/ClusterIssuer name used to sign the webhook certificate
+      name: ""
+      # -- Issuer kind (Issuer or ClusterIssuer)
+      kind: ClusterIssuer
+      # -- Issuer API group
+      group: cert-manager.io
 
 grafana:
   dashboards:

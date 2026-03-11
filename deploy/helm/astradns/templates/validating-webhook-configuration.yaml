@@ -5,6 +5,8 @@ metadata:
   name: {{ include "astradns.fullname" . }}-validating
   labels:
     {{- include "astradns.operator.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ printf "%s/%s-webhook-cert" (include "astradns.namespace" .) (include "astradns.fullname" .) | quote }}
 webhooks:
   - admissionReviewVersions:
       - v1
@@ -13,7 +15,6 @@ webhooks:
         namespace: {{ include "astradns.namespace" . }}
         name: {{ include "astradns.fullname" . }}-webhook-service
         path: /validate-dns-astradns-com-v1alpha1-dnsupstreampool
-      caBundle: {{ required "webhook.caBundle must be set when webhook.enabled=true" .Values.webhook.caBundle | quote }}
     failurePolicy: Fail
     matchPolicy: Equivalent
     name: vdnsupstreampool.astradns.com

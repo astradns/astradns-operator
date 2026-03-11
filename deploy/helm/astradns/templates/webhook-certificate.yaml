@@ -1,0 +1,19 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "astradns.fullname" . }}-webhook-cert
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "astradns.fullname" . }}-webhook-cert
+  dnsNames:
+    - {{ include "astradns.fullname" . }}-webhook-service
+    - {{ include "astradns.fullname" . }}-webhook-service.{{ include "astradns.namespace" . }}
+    - {{ include "astradns.fullname" . }}-webhook-service.{{ include "astradns.namespace" . }}.svc
+  issuerRef:
+    name: {{ required "webhook.certManager.issuerRef.name must be set when webhook.enabled=true" .Values.webhook.certManager.issuerRef.name | quote }}
+    kind: {{ .Values.webhook.certManager.issuerRef.kind | default "ClusterIssuer" | quote }}
+    group: {{ .Values.webhook.certManager.issuerRef.group | default "cert-manager.io" | quote }}
+{{- end }}
