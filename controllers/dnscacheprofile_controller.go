@@ -32,8 +32,8 @@ type DNSCacheProfileReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=dns.astradns.io,resources=dnscacheprofiles,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=dns.astradns.io,resources=dnscacheprofiles/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=dns.astradns.com,resources=dnscacheprofiles,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=dns.astradns.com,resources=dnscacheprofiles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile validates DNSCacheProfile and updates status conditions.

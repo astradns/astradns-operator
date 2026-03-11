@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: dnsupstreampools.dns.astradns.io
+  name: externaldnspolicies.dns.astradns.com
 spec:
-  group: dns.astradns.io
+  group: dns.astradns.com
   names:
-    kind: DNSUpstreamPool
-    listKind: DNSUpstreamPoolList
-    plural: dnsupstreampools
-    singular: dnsupstreampool
+    kind: ExternalDNSPolicy
+    listKind: ExternalDNSPolicyList
+    plural: externaldnspolicies
+    singular: externaldnspolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: DNSUpstreamPool is a pool of upstream DNS resolvers.
+        description: ExternalDNSPolicy defines per-namespace DNS resolution policy.
         properties:
           apiVersion:
             description: |-
@@ -37,67 +37,54 @@ spec:
           metadata:
             type: object
           spec:
-            description: DNSUpstreamPoolSpec defines the desired state of DNSUpstreamPool.
+            description: ExternalDNSPolicySpec defines the desired state of ExternalDNSPolicy.
             properties:
-              healthCheck:
-                description: HealthCheck configures health checking for upstreams.
+              cacheProfileRef:
+                description: CacheProfileRef optionally references a DNSCacheProfile.
                 properties:
-                  enabled:
-                    description: Enabled enables periodic health checks. Defaults
-                      to true.
-                    type: boolean
-                  failureThreshold:
-                    description: FailureThreshold is the number of consecutive failures
-                      before marking unhealthy. Defaults to 3.
-                    format: int32
-                    type: integer
-                  intervalSeconds:
-                    description: IntervalSeconds is the time between health checks.
-                      Defaults to 30.
-                    format: int32
-                    type: integer
-                  timeoutSeconds:
-                    description: TimeoutSeconds is the health check timeout. Defaults
-                      to 5.
-                    format: int32
-                    type: integer
-                type: object
-              loadBalancing:
-                description: LoadBalancing configures how queries are distributed
-                  across upstreams.
-                properties:
-                  strategy:
-                    description: 'Strategy is the load balancing algorithm: round-robin,
-                      first-available, or random.'
+                  name:
+                    description: Name is the name of the referenced resource.
                     type: string
+                required:
+                - name
                 type: object
-              upstreams:
-                description: Upstreams is the list of upstream DNS resolvers.
-                items:
-                  description: Upstream defines a single upstream DNS resolver.
-                  properties:
-                    address:
-                      description: Address is the IP address or hostname of the upstream
-                        resolver.
+              selector:
+                description: Selector determines which namespaces this policy applies
+                  to.
+                properties:
+                  namespaces:
+                    description: Namespaces is the list of namespace names this policy
+                      targets.
+                    items:
                       type: string
-                    port:
-                      description: Port is the port number of the upstream resolver.
-                        Defaults to 53.
-                      format: int32
-                      type: integer
-                  required:
-                  - address
-                  type: object
-                type: array
+                    type: array
+                required:
+                - namespaces
+                type: object
+              upstreamPoolRef:
+                description: UpstreamPoolRef references the DNSUpstreamPool to use.
+                properties:
+                  name:
+                    description: Name is the name of the referenced resource.
+                    type: string
+                required:
+                - name
+                type: object
             required:
-            - upstreams
+            - selector
+            - upstreamPoolRef
             type: object
           status:
-            description: DNSUpstreamPoolStatus defines the observed state of DNSUpstreamPool.
+            description: ExternalDNSPolicyStatus defines the observed state of ExternalDNSPolicy.
             properties:
+              appliedNodes:
+                description: AppliedNodes is the number of nodes where this policy
+                  is applied.
+                format: int32
+                type: integer
               conditions:
                 description: Conditions represent the latest available observations
-                  of the pool's state.
+                  of the policy's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -151,28 +138,6 @@ spec:
                   - reason
                   - status
                   - type
-                  type: object
-                type: array
-              upstreamStatuses:
-                description: UpstreamStatuses contains the health status of each upstream.
-                items:
-                  description: UpstreamStatus represents the observed state of a single
-                    upstream.
-                  properties:
-                    address:
-                      description: Address is the upstream address.
-                      type: string
-                    healthy:
-                      description: Healthy indicates whether the upstream is responding
-                        to health checks.
-                      type: boolean
-                    latencyMs:
-                      description: LatencyMs is the last measured latency in milliseconds.
-                      format: int64
-                      type: integer
-                  required:
-                  - address
-                  - healthy
                   type: object
                 type: array
             type: object

@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
 	"os"
+	"sort"
 	"strings"
 
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
@@ -28,6 +30,7 @@ import (
 
 const (
 	agentConfigMapName      = "astradns-agent-config"
+	agentConfigKey          = "config.json"
 	defaultCacheProfileName = "default"
 
 	upstreamPoolReadyCondition = "Ready"
@@ -42,9 +45,9 @@ type DNSUpstreamPoolReconciler struct {
 	Recorder       record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=dns.astradns.io,resources=dnsupstreampools,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=dns.astradns.io,resources=dnsupstreampools/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=dns.astradns.io,resources=dnscacheprofiles,verbs=get;list;watch
+// +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=dns.astradns.com,resources=dnscacheprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
@@ -98,18 +101,30 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	rendered, err := r.ConfigRenderer.Render(config)
-	if err != nil {
-		err = fmt.Errorf("render engine config: %w", err)
-		logger.Error(err, "Could not render engine configuration")
-		r.recordEvent(&pool, corev1.EventTypeWarning, "RenderFailed", err.Error())
-		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "RenderFailed", err.Error()); statusErr != nil {
+	// Validate config can be rendered (catches template errors early)
+	if _, err := r.ConfigRenderer.Render(config); err != nil {
+		err = fmt.Errorf("validate engine config: %w", err)
+		logger.Error(err, "Config validation failed")
+		r.recordEvent(&pool, corev1.EventTypeWarning, "ValidationFailed", err.Error())
+		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "ValidationFailed", err.Error()); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.upsertConfigMap(ctx, r.operatorNamespace(pool.Namespace), rendered); err != nil {
+	// Marshal EngineConfig as JSON for the agent
+	configJSON, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		err = fmt.Errorf("marshal engine config: %w", err)
+		logger.Error(err, "Could not marshal engine configuration to JSON")
+		r.recordEvent(&pool, corev1.EventTypeWarning, "MarshalFailed", err.Error())
+		if statusErr := r.setReadyCondition(ctx, &pool, metav1.ConditionFalse, "MarshalFailed", err.Error()); statusErr != nil {
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.upsertConfigMap(ctx, r.operatorNamespace(pool.Namespace), string(configJSON)); err != nil {
 		err = fmt.Errorf("upsert configmap: %w", err)
 		logger.Error(err, "Could not update config map")
 		r.recordEvent(&pool, corev1.EventTypeWarning, "ConfigMapUpdateFailed", err.Error())
@@ -154,6 +169,8 @@ func (r *DNSUpstreamPoolReconciler) mapCacheProfileToPools(ctx context.Context, 
 }
 
 func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Context, poolNamespace string) error {
+	logger := log.FromContext(ctx)
+
 	var pools v1alpha1.DNSUpstreamPoolList
 	if err := r.List(ctx, &pools, client.InNamespace(poolNamespace)); err != nil {
 		return fmt.Errorf("list remaining DNSUpstreamPools: %w", err)
@@ -162,6 +179,19 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 	configNamespace := r.operatorNamespace(poolNamespace)
 	if len(pools.Items) == 0 {
 		return r.removeConfigKey(ctx, configNamespace)
+	}
+
+	// Sort by name for deterministic selection when multiple pools exist.
+	sort.Slice(pools.Items, func(i, j int) bool {
+		return pools.Items[i].Name < pools.Items[j].Name
+	})
+
+	if len(pools.Items) > 1 {
+		logger.Info("multiple DNSUpstreamPools in namespace, using first alphabetically",
+			"namespace", poolNamespace,
+			"selected", pools.Items[0].Name,
+			"count", len(pools.Items),
+		)
 	}
 
 	profile, err := r.getDefaultCacheProfile(ctx, poolNamespace)
@@ -174,12 +204,17 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 		return fmt.Errorf("generate engine config from remaining pool: %w", err)
 	}
 
-	rendered, err := r.ConfigRenderer.Render(config)
-	if err != nil {
-		return fmt.Errorf("render config from remaining pool: %w", err)
+	// Validate config can be rendered (catches template errors early)
+	if _, err := r.ConfigRenderer.Render(config); err != nil {
+		return fmt.Errorf("validate config from remaining pool: %w", err)
 	}
 
-	return r.upsertConfigMap(ctx, configNamespace, rendered)
+	configJSON, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config from remaining pool: %w", err)
+	}
+
+	return r.upsertConfigMap(ctx, configNamespace, string(configJSON))
 }
 
 func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespace, renderedConfig string) error {
@@ -194,7 +229,7 @@ func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespa
 		if configMap.Data == nil {
 			configMap.Data = map[string]string{}
 		}
-		configMap.Data[r.ConfigRenderer.ConfigFileName()] = renderedConfig
+		configMap.Data[agentConfigKey] = renderedConfig
 		return nil
 	})
 	if err != nil {
@@ -219,7 +254,7 @@ func (r *DNSUpstreamPoolReconciler) removeConfigKey(ctx context.Context, namespa
 			configMap.Data = map[string]string{}
 			return nil
 		}
-		delete(configMap.Data, r.ConfigRenderer.ConfigFileName())
+		delete(configMap.Data, agentConfigKey)
 		return nil
 	})
 	if err != nil {

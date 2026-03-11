@@ -39,9 +39,9 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 				Namespace: namespace,
 			}, configMap)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(configMap.Data).To(HaveKey("unbound.conf"))
-			g.Expect(configMap.Data["unbound.conf"]).To(ContainSubstring("forward-addr: 1.1.1.1"))
-			g.Expect(configMap.Data["unbound.conf"]).To(ContainSubstring("forward-addr: 8.8.8.8@5353"))
+			g.Expect(configMap.Data).To(HaveKey("config.json"))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "1.1.1.1"`))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"port": 5353`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 
 		Eventually(func(g Gomega) {
@@ -73,7 +73,7 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 			configMap := &corev1.ConfigMap{}
 			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: agentConfigMapName, Namespace: namespace}, configMap)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(configMap.Data["unbound.conf"]).To(ContainSubstring("forward-addr: 8.8.8.8"))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "8.8.8.8"`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 
 		Eventually(func() error {
@@ -94,8 +94,8 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 			configMap := &corev1.ConfigMap{}
 			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: agentConfigMapName, Namespace: namespace}, configMap)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(configMap.Data).To(HaveKey("unbound.conf"))
-			g.Expect(configMap.Data["unbound.conf"]).To(ContainSubstring("forward-addr: 9.9.9.9"))
+			g.Expect(configMap.Data).To(HaveKey("config.json"))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "9.9.9.9"`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
@@ -115,7 +115,7 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 			configMap := &corev1.ConfigMap{}
 			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: agentConfigMapName, Namespace: namespace}, configMap)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(configMap.Data).To(HaveKey("unbound.conf"))
+			g.Expect(configMap.Data).To(HaveKey("config.json"))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 
 		Expect(k8sClient.Delete(context.Background(), pool)).To(Succeed())
@@ -129,7 +129,7 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 			if err != nil {
 				return false
 			}
-			_, exists := configMap.Data["unbound.conf"]
+			_, exists := configMap.Data["config.json"]
 			return !exists
 		}, eventuallyTimeout, eventuallyPoll).Should(BeTrue())
 	})

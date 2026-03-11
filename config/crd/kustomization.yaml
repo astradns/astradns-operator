@@ -1,0 +1,4 @@
+resources:
+- bases/dns.astradns.com_dnsupstreampools.yaml
+- bases/dns.astradns.com_dnscacheprofiles.yaml
+- bases/dns.astradns.com_externaldnspolicies.yaml
