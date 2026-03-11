@@ -78,12 +78,8 @@ var _ = Describe("Manager", Ordered, func() {
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
 	// and deleting the namespace.
 	AfterAll(func() {
-		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-		_, _ = utils.Run(cmd)
-
 		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
+		cmd := exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
 
 		By("uninstalling CRDs")
@@ -118,13 +114,12 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
 			}
 
-			By("Fetching curl-metrics logs")
-			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
-			metricsOutput, err := utils.Run(cmd)
+			By("Fetching metrics endpoint output")
+			metricsOutput, err := getMetricsOutput()
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics output:\n %s", metricsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get metrics output: %s", err)
 			}
 
 			By("Fetching controller manager pod description")
@@ -176,22 +171,12 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=astradns-operator-metrics-reader",
-				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
-			)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
+			Expect(ensureMetricsReaderBinding()).To(Succeed())
 
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
-			_, err = utils.Run(cmd)
+			cmd := exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
+			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
-
-			By("getting the service account token")
-			token, err := serviceAccountToken()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(token).NotTo(BeEmpty())
 
 			By("ensuring the controller pod is ready")
 			verifyControllerPodReady := func(g Gomega) {
@@ -215,54 +200,10 @@ var _ = Describe("Manager", Ordered, func() {
 
 			// +kubebuilder:scaffold:e2e-metrics-webhooks-readiness
 
-			By("creating the curl-metrics pod to access the metrics endpoint")
-			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
-				"--namespace", namespace,
-				"--image=curlimages/curl:latest",
-				"--overrides",
-				fmt.Sprintf(`{
-					"spec": {
-						"containers": [{
-							"name": "curl",
-							"image": "curlimages/curl:latest",
-							"command": ["/bin/sh", "-c"],
-							"args": [
-								"for i in $(seq 1 30); do curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics && exit 0 || sleep 2; done; exit 1"
-							],
-							"securityContext": {
-								"readOnlyRootFilesystem": true,
-								"allowPrivilegeEscalation": false,
-								"capabilities": {
-									"drop": ["ALL"]
-								},
-								"runAsNonRoot": true,
-								"runAsUser": 1000,
-								"seccompProfile": {
-									"type": "RuntimeDefault"
-								}
-							}
-						}],
-						"serviceAccountName": "%s"
-					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
-
-			By("waiting for the curl-metrics pod to complete.")
-			verifyCurlUp := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
-					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
-			}
-			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
-
-			By("getting the metrics by checking curl-metrics logs")
+			By("getting metrics from a fresh curl pod")
 			verifyMetricsAvailable := func(g Gomega) {
 				metricsOutput, err := getMetricsOutput()
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve metrics output")
 				g.Expect(metricsOutput).NotTo(BeEmpty())
 				g.Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
 			}
@@ -495,7 +436,7 @@ spec:
 			Eventually(verifyConfigKeyRemoved, time.Minute).Should(Succeed())
 		})
 
-		It("should set Ready=False with reason InvalidSpec when pool has empty upstreams", func() {
+		It("should reject pool creation when upstreams list is empty", func() {
 			poolName := "test-pool-invalid"
 
 			By("applying a DNSUpstreamPool with empty upstreams list")
@@ -513,36 +454,8 @@ spec:
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(poolYAML)
 			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply invalid DNSUpstreamPool CR")
-
-			By("verifying the pool status has Ready=False with reason InvalidSpec")
-			verifyPoolInvalid := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get",
-					fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
-					"-n", namespace,
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
-				statusOutput, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(statusOutput).To(Equal("False"),
-					"DNSUpstreamPool with empty upstreams should have Ready=False")
-
-				cmd = exec.Command("kubectl", "get",
-					fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
-					"-n", namespace,
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].reason}")
-				reasonOutput, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(reasonOutput).To(Equal("InvalidSpec"),
-					"Ready condition reason should be InvalidSpec")
-			}
-			Eventually(verifyPoolInvalid, time.Minute).Should(Succeed())
-
-			By("cleaning up the invalid DNSUpstreamPool")
-			cmd = exec.Command("kubectl", "delete",
-				fmt.Sprintf("dnsupstreampools.dns.astradns.com/%s", poolName),
-				"-n", namespace, "--ignore-not-found")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to delete invalid DNSUpstreamPool")
+			Expect(err).To(HaveOccurred(), "Applying invalid DNSUpstreamPool CR should fail")
+			Expect(err.Error()).To(ContainSubstring("spec.upstreams"))
 		})
 
 		It("should record successful reconciliation metrics for DNSUpstreamPool", func() {
@@ -640,10 +553,60 @@ func serviceAccountToken() (string, error) {
 	return out, err
 }
 
-// getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
+// ensureMetricsReaderBinding creates/updates the ClusterRoleBinding needed to read /metrics.
+func ensureMetricsReaderBinding() error {
+	binding := fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: %s
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: %s
+  namespace: %s
+`, metricsRoleBindingName, serviceAccountName, namespace)
+
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(binding)
+	_, err := utils.Run(cmd)
+	return err
+}
+
+// getMetricsOutput retrieves metrics by creating a fresh curl pod for each request.
 func getMetricsOutput() (string, error) {
-	By("getting the curl-metrics logs")
-	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+	token, err := serviceAccountToken()
+	if err != nil {
+		return "", err
+	}
+
+	podName := fmt.Sprintf("curl-metrics-%d", time.Now().UnixNano())
+	curlCmd := fmt.Sprintf(
+		"curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics",
+		token,
+		metricsServiceName,
+		namespace,
+	)
+
+	cmd := exec.Command(
+		"kubectl",
+		"run",
+		podName,
+		"-n",
+		namespace,
+		"--rm",
+		"-i",
+		"--restart=Never",
+		"--image=curlimages/curl:8.12.1",
+		"--command",
+		"--",
+		"sh",
+		"-c",
+		curlCmd,
+	)
+
 	return utils.Run(cmd)
 }
 
