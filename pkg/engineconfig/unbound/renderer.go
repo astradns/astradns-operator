@@ -28,6 +28,10 @@ func (r *UnboundRenderer) Render(config *engine.EngineConfig) (string, error) {
 	}
 
 	normalized := normalizeConfig(*config)
+	if err := engine.ValidateTemplateConfig(normalized); err != nil {
+		return "", fmt.Errorf("validate unbound template input: %w", err)
+	}
+
 	data := engine.NewTemplateData(normalized)
 	tmpl, err := template.New("unbound.conf").Parse(engine.UnboundConfigTemplate)
 	if err != nil {

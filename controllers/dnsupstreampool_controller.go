@@ -30,6 +30,7 @@ import (
 
 const (
 	agentConfigMapName      = "astradns-agent-config"
+	agentConfigMapNameEnv   = "ASTRADNS_AGENT_CONFIGMAP_NAME"
 	agentConfigKey          = "config.json"
 	defaultCacheProfileName = "default"
 
@@ -218,9 +219,11 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 }
 
 func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespace, renderedConfig string) error {
+	configMapName := r.resolvedAgentConfigMapName()
+
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentConfigMapName,
+			Name:      configMapName,
 			Namespace: namespace,
 		},
 	}
@@ -233,20 +236,22 @@ func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespa
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("create or update ConfigMap %s/%s: %w", namespace, agentConfigMapName, err)
+		return fmt.Errorf("create or update ConfigMap %s/%s: %w", namespace, configMapName, err)
 	}
 
 	return nil
 }
 
 func (r *DNSUpstreamPoolReconciler) removeConfigKey(ctx context.Context, namespace string) error {
+	configMapName := r.resolvedAgentConfigMapName()
+
 	configMap := &corev1.ConfigMap{}
-	namespacedName := types.NamespacedName{Name: agentConfigMapName, Namespace: namespace}
+	namespacedName := types.NamespacedName{Name: configMapName, Namespace: namespace}
 	if err := r.Get(ctx, namespacedName, configMap); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("get ConfigMap %s/%s: %w", namespace, agentConfigMapName, err)
+		return fmt.Errorf("get ConfigMap %s/%s: %w", namespace, configMapName, err)
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, configMap, func() error {
@@ -258,7 +263,7 @@ func (r *DNSUpstreamPoolReconciler) removeConfigKey(ctx context.Context, namespa
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("remove config key from ConfigMap %s/%s: %w", namespace, agentConfigMapName, err)
+		return fmt.Errorf("remove config key from ConfigMap %s/%s: %w", namespace, configMapName, err)
 	}
 
 	return nil
@@ -337,6 +342,13 @@ func (r *DNSUpstreamPoolReconciler) operatorNamespace(fallback string) string {
 		return namespace
 	}
 	return fallback
+}
+
+func (r *DNSUpstreamPoolReconciler) resolvedAgentConfigMapName() string {
+	if name := strings.TrimSpace(os.Getenv(agentConfigMapNameEnv)); name != "" {
+		return name
+	}
+	return agentConfigMapName
 }
 
 func (r *DNSUpstreamPoolReconciler) recordEvent(object *v1alpha1.DNSUpstreamPool, eventType, reason, message string) {

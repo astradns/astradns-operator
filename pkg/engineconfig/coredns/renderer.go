@@ -28,6 +28,10 @@ func (r *CoreDNSRenderer) Render(config *engine.EngineConfig) (string, error) {
 	}
 
 	normalized := normalizeConfig(*config)
+	if err := engine.ValidateTemplateConfig(normalized); err != nil {
+		return "", fmt.Errorf("validate coredns template input: %w", err)
+	}
+
 	data := engine.NewTemplateData(normalized)
 	tmpl, err := template.New("Corefile").Parse(engine.CorefileTemplate)
 	if err != nil {

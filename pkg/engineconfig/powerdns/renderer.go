@@ -27,7 +27,12 @@ func (r *PowerDNSRenderer) Render(config *engine.EngineConfig) (string, error) {
 		return "", errors.New("engine config is required")
 	}
 
+	if err := engine.ValidateTemplateConfig(*config); err != nil {
+		return "", fmt.Errorf("validate powerdns template input: %w", err)
+	}
+
 	data := engine.NewTemplateData(*config)
+
 	tmpl, err := template.New("recursor.conf").Parse(engine.RecursorConfTemplate)
 	if err != nil {
 		return "", fmt.Errorf("parse powerdns template: %w", err)

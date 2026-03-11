@@ -41,6 +41,14 @@ spec:
             {{- if .Values.operator.leaderElect }}
             - --leader-elect
             {{- end }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: ASTRADNS_AGENT_CONFIGMAP_NAME
+              value: {{ include "astradns.agent.configmap" . | quote }}
           ports:
             - name: health
               containerPort: 8081

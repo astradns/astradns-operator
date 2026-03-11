@@ -16,10 +16,8 @@ rules:
       - get
       - list
       - watch
-      - create
       - update
       - patch
-      - delete
   # CRD status subresource
   - apiGroups:
       - dns.astradns.com
@@ -31,15 +29,6 @@ rules:
       - get
       - update
       - patch
-  # CRD finalizers
-  - apiGroups:
-      - dns.astradns.com
-    resources:
-      - dnsupstreampools/finalizers
-      - dnscacheprofiles/finalizers
-      - externaldnspolicies/finalizers
-    verbs:
-      - update
   # ConfigMap management (agent config)
   - apiGroups:
       - ""
