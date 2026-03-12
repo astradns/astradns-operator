@@ -32,7 +32,7 @@ spec:
       containers:
         - name: coredns-patcher
           image: {{ .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage | quote }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImagePullPolicy | quote }}
           command:
             - /bin/sh
             - -ec

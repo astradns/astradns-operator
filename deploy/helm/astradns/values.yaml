@@ -158,6 +158,8 @@ clusterDNS:
     forwardTarget: 169.254.20.11:5353
     # -- Kubectl image used by patch job.
     kubectlImage: bitnami/kubectl:1.31.4
+    # -- Image pull policy for cluster DNS patch job.
+    kubectlImagePullPolicy: IfNotPresent
 
 grafana:
   dashboards:
