@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
 	typesengineconfig "github.com/astradns/astradns-types/engineconfig"
@@ -44,6 +46,9 @@ const (
 	configMapSafetyOverheadBytes  = 4 << 10
 	maxAgentConfigJSONBytes       = configMapObjectSizeLimitBytes - configMapSafetyOverheadBytes
 
+	configMapUpdateFailureThreshold = 3
+	configMapCircuitOpenInterval    = 30 * time.Second
+
 	// initialRVAnnotation stores the ResourceVersion observed when the controller
 	// first reconciles a pool. Unlike the live ResourceVersion (which changes on
 	// every update), this value is monotonically ordered in etcd and reflects true
@@ -52,6 +57,8 @@ const (
 	initialRVAnnotation = "dns.astradns.com/initial-resource-version"
 )
 
+var errConfigMapCircuitOpen = errors.New("configmap update circuit breaker is open")
+
 // DNSUpstreamPoolReconciler reconciles DNSUpstreamPool objects.
 type DNSUpstreamPoolReconciler struct {
 	client.Client
@@ -59,6 +66,10 @@ type DNSUpstreamPoolReconciler struct {
 	ConfigGen      typesengineconfig.ConfigGenerator
 	ConfigRenderer typesengineconfig.ConfigRenderer
 	Recorder       events.EventRecorder
+
+	configMapCircuitMu        sync.Mutex
+	configMapFailureCounts    map[string]int
+	configMapCircuitOpenUntil map[string]time.Time
 }
 
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools,verbs=get;list;watch;update;patch
@@ -221,20 +232,30 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.upsertConfigMap(ctx, r.operatorNamespace(pool.Namespace), string(configJSON)); err != nil {
+	operatorNamespace := r.operatorNamespace(pool.Namespace)
+	if err := r.upsertConfigMapWithCircuitBreaker(ctx, operatorNamespace, string(configJSON)); err != nil {
 		err = fmt.Errorf("upsert configmap: %w", err)
+		reason := "ConfigMapUpdateFailed"
+		result := ctrl.Result{}
+		if errors.Is(err, errConfigMapCircuitOpen) {
+			reason = "ConfigMapCircuitOpen"
+			result.RequeueAfter = configMapCircuitOpenInterval
+		}
 		logger.Error(err, "Could not update config map")
-		r.recordEvent(&pool, corev1.EventTypeWarning, "ConfigMapUpdateFailed", err.Error())
+		r.recordEvent(&pool, corev1.EventTypeWarning, reason, err.Error())
 		if statusErr := r.setReadyCondition(
 			ctx,
 			&pool,
 			metav1.ConditionFalse,
-			"ConfigMapUpdateFailed",
+			reason,
 			err.Error(),
 		); statusErr != nil {
-			return ctrl.Result{}, statusErr
+			return result, statusErr
 		}
-		return ctrl.Result{}, err
+		if errors.Is(err, errConfigMapCircuitOpen) {
+			return result, nil
+		}
+		return result, err
 	}
 
 	r.recordEvent(&pool, corev1.EventTypeNormal, "ConfigRendered", "Rendered engine configuration")
@@ -334,7 +355,20 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 		return nil
 	}
 
-	if err := r.upsertConfigMap(ctx, configNamespace, string(configJSON)); err != nil {
+	if err := r.upsertConfigMapWithCircuitBreaker(ctx, configNamespace, string(configJSON)); err != nil {
+		if errors.Is(err, errConfigMapCircuitOpen) {
+			r.recordEvent(&pools.Items[0], corev1.EventTypeWarning, "ConfigMapCircuitOpen", err.Error())
+			if statusErr := r.setReadyCondition(
+				ctx,
+				&pools.Items[0],
+				metav1.ConditionFalse,
+				"ConfigMapCircuitOpen",
+				err.Error(),
+			); statusErr != nil {
+				return fmt.Errorf("update circuit-open pool status: %w", statusErr)
+			}
+			return nil
+		}
 		return err
 	}
 
@@ -463,6 +497,89 @@ func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespa
 	}
 
 	return nil
+}
+
+func (r *DNSUpstreamPoolReconciler) upsertConfigMapWithCircuitBreaker(
+	ctx context.Context,
+	namespace,
+	renderedConfig string,
+) error {
+	if openUntil, open := r.isConfigMapCircuitOpen(namespace); open {
+		return fmt.Errorf(
+			"%w: namespace %q until %s",
+			errConfigMapCircuitOpen,
+			namespace,
+			openUntil.UTC().Format(time.RFC3339),
+		)
+	}
+
+	if err := r.upsertConfigMap(ctx, namespace, renderedConfig); err != nil {
+		r.recordConfigMapUpdateFailure(namespace)
+		return err
+	}
+
+	r.resetConfigMapUpdateFailures(namespace)
+	return nil
+}
+
+func (r *DNSUpstreamPoolReconciler) recordConfigMapUpdateFailure(namespace string) {
+	r.configMapCircuitMu.Lock()
+	defer r.configMapCircuitMu.Unlock()
+
+	r.ensureConfigMapCircuitStateLocked()
+
+	if openUntil, open := r.configMapCircuitOpenUntil[namespace]; open {
+		if time.Now().Before(openUntil) {
+			return
+		}
+		delete(r.configMapCircuitOpenUntil, namespace)
+	}
+
+	nextFailureCount := r.configMapFailureCounts[namespace] + 1
+	if nextFailureCount >= configMapUpdateFailureThreshold {
+		r.configMapCircuitOpenUntil[namespace] = time.Now().Add(configMapCircuitOpenInterval)
+		r.configMapFailureCounts[namespace] = 0
+		return
+	}
+
+	r.configMapFailureCounts[namespace] = nextFailureCount
+}
+
+func (r *DNSUpstreamPoolReconciler) resetConfigMapUpdateFailures(namespace string) {
+	r.configMapCircuitMu.Lock()
+	defer r.configMapCircuitMu.Unlock()
+
+	r.ensureConfigMapCircuitStateLocked()
+	delete(r.configMapFailureCounts, namespace)
+	delete(r.configMapCircuitOpenUntil, namespace)
+}
+
+func (r *DNSUpstreamPoolReconciler) isConfigMapCircuitOpen(namespace string) (time.Time, bool) {
+	r.configMapCircuitMu.Lock()
+	defer r.configMapCircuitMu.Unlock()
+
+	r.ensureConfigMapCircuitStateLocked()
+
+	openUntil, open := r.configMapCircuitOpenUntil[namespace]
+	if !open {
+		return time.Time{}, false
+	}
+
+	if time.Now().After(openUntil) {
+		delete(r.configMapCircuitOpenUntil, namespace)
+		return time.Time{}, false
+	}
+
+	return openUntil, true
+}
+
+func (r *DNSUpstreamPoolReconciler) ensureConfigMapCircuitStateLocked() {
+	if r.configMapFailureCounts == nil {
+		r.configMapFailureCounts = make(map[string]int)
+	}
+	if r.configMapCircuitOpenUntil == nil {
+		r.configMapCircuitOpenUntil = make(map[string]time.Time)
+	}
 }
 
 func (r *DNSUpstreamPoolReconciler) removeConfigKey(ctx context.Context, namespace string) error {

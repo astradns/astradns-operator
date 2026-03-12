@@ -100,7 +100,9 @@ spec:
                     address:
                       description: Address is the IP address or hostname of the upstream
                         resolver.
+                      maxLength: 253
                       minLength: 1
+                      pattern: ^[A-Za-z0-9]([A-Za-z0-9.:-]*[A-Za-z0-9])?$
                       type: string
                     port:
                       default: 53

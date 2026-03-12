@@ -14,7 +14,7 @@ import (
 var _ = Describe("DNSCacheProfile Controller", func() {
 	It("sets Active=True for a valid profile", func() {
 		namespace := createNamespace("cache-valid")
-		profileName := "default"
+		profileName := defaultCacheProfileName
 
 		profile := &v1alpha1.DNSCacheProfile{
 			ObjectMeta: metav1.ObjectMeta{Name: profileName, Namespace: namespace},

@@ -44,6 +44,48 @@ func TestValidateConfigMapPayloadSize(t *testing.T) {
 	})
 }
 
+func TestConfigMapCircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) {
+	reconciler := &DNSUpstreamPoolReconciler{}
+	namespace := "default"
+
+	for range configMapUpdateFailureThreshold {
+		reconciler.recordConfigMapUpdateFailure(namespace)
+	}
+
+	if _, open := reconciler.isConfigMapCircuitOpen(namespace); !open {
+		t.Fatal("expected configmap circuit breaker to open after consecutive failures")
+	}
+}
+
+func TestConfigMapCircuitBreakerResetClearsState(t *testing.T) {
+	reconciler := &DNSUpstreamPoolReconciler{}
+	namespace := "default"
+
+	reconciler.recordConfigMapUpdateFailure(namespace)
+	reconciler.recordConfigMapUpdateFailure(namespace)
+	reconciler.resetConfigMapUpdateFailures(namespace)
+
+	if _, open := reconciler.isConfigMapCircuitOpen(namespace); open {
+		t.Fatal("expected configmap circuit breaker to be closed after reset")
+	}
+
+	if count := reconciler.configMapFailureCounts[namespace]; count != 0 {
+		t.Fatalf("expected failure counter to reset to 0, got %d", count)
+	}
+}
+
+func TestConfigMapCircuitBreakerExpiresOpenWindow(t *testing.T) {
+	reconciler := &DNSUpstreamPoolReconciler{
+		configMapCircuitOpenUntil: map[string]time.Time{
+			"default": time.Now().Add(-time.Second),
+		},
+	}
+
+	if _, open := reconciler.isConfigMapCircuitOpen("default"); open {
+		t.Fatal("expected expired configmap circuit breaker window to be closed")
+	}
+}
+
 // --- Gap 6: validateDNSUpstreamPool and isValidUpstreamAddress edge cases ---
 
 func TestIsValidUpstreamAddress(t *testing.T) {
