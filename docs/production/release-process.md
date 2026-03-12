@@ -22,6 +22,18 @@ helm package deploy/helm/astradns --destination dist
 
 The release workflow also performs chart packaging on tags.
 
+## Helm distribution
+
+Tagged releases publish the chart as OCI to GHCR:
+
+- `oci://ghcr.io/astradns/helm-charts/astradns:<tag>`
+
+Example install:
+
+```sh
+helm install astradns oci://ghcr.io/astradns/helm-charts/astradns --version 0.2.0 -n astradns-system --create-namespace
+```
+
 ## Upgrade strategy (Canary and Blue/Green)
 
 Use one of the following rollout profiles for production upgrades.
