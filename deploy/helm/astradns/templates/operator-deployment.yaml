@@ -23,6 +23,9 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "astradns.fullname" . }}-operator
+      {{- if .Values.operator.priorityClassName }}
+      priorityClassName: {{ .Values.operator.priorityClassName | quote }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

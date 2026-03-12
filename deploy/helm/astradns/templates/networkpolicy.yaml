@@ -1,0 +1,78 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $metricsLabel := .Values.networkPolicy.metricsNamespaceSelector.label }}
+{{- $metricsValue := .Values.networkPolicy.metricsNamespaceSelector.value }}
+{{- $clusterDNSNamespace := .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astradns.fullname" . }}-operator
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astradns.operator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{ $metricsLabel }}: {{ $metricsValue | quote }}
+      ports:
+        - port: 8443
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "astradns.namespace" . | quote }}
+      ports:
+        - port: 8081
+          protocol: TCP
+    {{- if .Values.webhook.enabled }}
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 9443
+          protocol: TCP
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astradns.fullname" . }}-agent
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.agent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astradns.agent.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $clusterDNSNamespace | quote }}
+      ports:
+        - port: 5353
+          protocol: UDP
+        - port: 5353
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{ $metricsLabel }}: {{ $metricsValue | quote }}
+      ports:
+        - port: 9153
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "astradns.namespace" . | quote }}
+      ports:
+        - port: 8080
+          protocol: TCP
+{{- end }}

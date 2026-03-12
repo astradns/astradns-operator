@@ -35,7 +35,7 @@ kubectl logs -n <namespace> job/<release>-astradns-coredns-patch
 ```
 
 2. Validate values:
-   - `coredns.integration.enabled=true`
+   - `clusterDNS.forwardExternalToAstraDNS.enabled=true`
    - `agent.network.mode=linkLocal`
 3. Re-run upgrade after fixing values.
 

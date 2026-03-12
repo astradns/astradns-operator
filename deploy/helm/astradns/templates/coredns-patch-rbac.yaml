@@ -1,6 +1,6 @@
-{{- if .Values.coredns.integration.enabled }}
+{{- if .Values.clusterDNS.forwardExternalToAstraDNS.enabled }}
 {{- if ne (include "astradns.agent.network.mode" .) "linkLocal" }}
-{{- fail "coredns.integration.enabled requires agent.network.mode=linkLocal" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.enabled requires agent.network.mode=linkLocal" }}
 {{- end }}
 apiVersion: v1
 kind: ServiceAccount
@@ -14,7 +14,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "astradns.fullname" . }}-coredns-patcher
-  namespace: {{ .Values.coredns.integration.namespace }}
+  namespace: {{ .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
   labels:
     {{- include "astradns.operator.labels" . | nindent 4 }}
 rules:
@@ -23,17 +23,17 @@ rules:
     resources:
       - configmaps
     resourceNames:
-      - {{ .Values.coredns.integration.configMapName }}
+      - {{ .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
     verbs:
       - get
       - patch
-  {{- if .Values.coredns.integration.rolloutDeployment }}
+  {{- if .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
   - apiGroups:
       - apps
     resources:
       - deployments
     resourceNames:
-      - {{ .Values.coredns.integration.rolloutDeployment }}
+      - {{ .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
     verbs:
       - get
       - patch
@@ -43,7 +43,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "astradns.fullname" . }}-coredns-patcher
-  namespace: {{ .Values.coredns.integration.namespace }}
+  namespace: {{ .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
   labels:
     {{- include "astradns.operator.labels" . | nindent 4 }}
 roleRef:

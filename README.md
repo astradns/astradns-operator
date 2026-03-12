@@ -54,7 +54,8 @@ When deployed with Helm, this value is taken from `agent.engineType` and propaga
 The chart includes a production profile at `deploy/helm/astradns/values-production.yaml` with:
 
 - Link-local data path (`agent.network.mode=linkLocal`, `169.254.20.11`)
-- Optional CoreDNS integration job (`coredns.integration.enabled=true`)
+- Optional cluster DNS integration job (`clusterDNS.forwardExternalToAstraDNS.enabled=true`)
+- PodDisruptionBudgets + NetworkPolicies + PriorityClass defaults
 - ServiceMonitor and Grafana dashboard ConfigMap enabled
 - Validating webhook enabled (cert-manager issuer still required)
 
@@ -69,9 +70,11 @@ helm upgrade --install astradns deploy/helm/astradns \
 
 ## CoreDNS Integration
 
-With `coredns.integration.enabled=true`, Helm runs a post-install/post-upgrade job that patches the CoreDNS ConfigMap forward target to the AstraDNS link-local listener (`169.254.20.11:5353` by default).
+With `clusterDNS.forwardExternalToAstraDNS.enabled=true`, Helm runs a post-install/post-upgrade job that patches the CoreDNS ConfigMap forward target to the AstraDNS link-local listener (`169.254.20.11:5353` by default).
 
-To avoid misconfiguration, CoreDNS integration requires `agent.network.mode=linkLocal`.
+To avoid misconfiguration, cluster DNS integration requires `agent.network.mode=linkLocal`.
+
+The integration toggle remains explicit because some clusters patch CoreDNS out-of-band (GitOps/platform controllers), and Helm should not overwrite cluster DNS unless requested.
 
 ## Engine Image Strategy
 

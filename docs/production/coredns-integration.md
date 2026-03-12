@@ -10,8 +10,8 @@ agent:
     mode: linkLocal
     linkLocalIP: 169.254.20.11
 
-coredns:
-  integration:
+clusterDNS:
+  forwardExternalToAstraDNS:
     enabled: true
     namespace: kube-system
     configMapName: coredns

@@ -21,7 +21,7 @@ helm upgrade --install "${SLO_RELEASE}" "${ROOT_DIR}/deploy/helm/astradns" \
   --namespace "${SLO_NAMESPACE}" --create-namespace \
   -f "${ROOT_DIR}/deploy/helm/astradns/values-production.yaml" \
   --set webhook.enabled=false \
-  --set coredns.integration.enabled=false >/dev/null
+  --set clusterDNS.forwardExternalToAstraDNS.enabled=false >/dev/null
 end_ts=$(date +%s)
 install_seconds=$((end_ts - start_ts))
 echo "install_time_seconds=${install_seconds}" | tee -a "${REPORT_FILE}"

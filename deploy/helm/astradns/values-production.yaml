@@ -12,6 +12,8 @@ agent:
     mode: linkLocal
     linkLocalIP: 169.254.20.11
 
+  priorityClassName: system-cluster-critical
+
   # Optional image strategy: set explicit image repositories by engine.
   # Keep empty to reuse agent.image repository/tag.
   engineImages:
@@ -25,13 +27,19 @@ agent:
       repository: ""
       tag: ""
 
-coredns:
-  integration:
+clusterDNS:
+  forwardExternalToAstraDNS:
     enabled: true
     namespace: kube-system
     configMapName: coredns
     rolloutDeployment: coredns
     forwardTarget: 169.254.20.11:5353
+
+operator:
+  priorityClassName: system-cluster-critical
+
+networkPolicy:
+  enabled: true
 
 serviceMonitor:
   enabled: true

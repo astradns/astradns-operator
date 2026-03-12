@@ -1,6 +1,6 @@
-{{- if .Values.coredns.integration.enabled }}
+{{- if .Values.clusterDNS.forwardExternalToAstraDNS.enabled }}
 {{- if ne (include "astradns.agent.network.mode" .) "linkLocal" }}
-{{- fail "coredns.integration.enabled requires agent.network.mode=linkLocal" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.enabled requires agent.network.mode=linkLocal" }}
 {{- end }}
 apiVersion: batch/v1
 kind: Job
@@ -28,16 +28,16 @@ spec:
           type: RuntimeDefault
       containers:
         - name: coredns-patcher
-          image: {{ .Values.coredns.integration.kubectlImage | quote }}
+          image: {{ .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage | quote }}
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -ec
             - |
-              namespace="{{ .Values.coredns.integration.namespace }}"
-              configmap="{{ .Values.coredns.integration.configMapName }}"
-              forward_target="{{ .Values.coredns.integration.forwardTarget }}"
-              rollout_deployment="{{ .Values.coredns.integration.rolloutDeployment }}"
+              namespace="{{ .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}"
+              configmap="{{ .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}"
+              forward_target="{{ .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}"
+              rollout_deployment="{{ .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}"
 
               corefile_path="/tmp/Corefile"
               backup_path="/tmp/Corefile.backup"

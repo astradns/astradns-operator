@@ -1,0 +1,14 @@
+{{- if .Values.agent.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "astradns.fullname" . }}-agent
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.agent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "astradns.agent.selectorLabels" . | nindent 6 }}
+  maxUnavailable: {{ .Values.agent.pdb.maxUnavailable }}
+{{- end }}

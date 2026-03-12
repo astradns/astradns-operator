@@ -4,7 +4,7 @@ This checklist is the release gate for promoting AstraDNS MVP to production.
 
 ## 1) Helm CoreDNS integration
 
-- [ ] `coredns.integration.enabled=true` validated in staging.
+- [ ] `clusterDNS.forwardExternalToAstraDNS.enabled=true` validated in staging.
 - [ ] CoreDNS ConfigMap patch job completed successfully.
 - [ ] CoreDNS rollout restart completed and DNS remained available.
 

@@ -34,6 +34,13 @@ operator:
   podLabels: {}
   # -- Additional annotations for operator pods
   podAnnotations: {}
+  # -- Priority class for operator pods. Uses built-in Kubernetes critical class by default.
+  priorityClassName: system-cluster-critical
+  pdb:
+    # -- Create PodDisruptionBudget for operator deployment.
+    enabled: true
+    # -- Minimum available operator pods during voluntary disruptions.
+    minAvailable: 1
   serviceAccount:
     # -- Annotations for the operator service account
     annotations: {}
@@ -83,6 +90,13 @@ agent:
   podLabels: {}
   # -- Additional annotations for agent pods
   podAnnotations: {}
+  # -- Priority class for agent pods. Uses built-in Kubernetes critical class by default.
+  priorityClassName: system-cluster-critical
+  pdb:
+    # -- Create PodDisruptionBudget for agent DaemonSet.
+    enabled: true
+    # -- Maximum unavailable agent pods during voluntary disruptions.
+    maxUnavailable: 10%
   serviceAccount:
     # -- Annotations for the agent service account
     annotations: {}
@@ -101,6 +115,15 @@ serviceMonitor:
   # -- Scrape timeout
   scrapeTimeout: 10s
 
+networkPolicy:
+  # -- Create NetworkPolicies for operator and agent pods.
+  enabled: true
+  metricsNamespaceSelector:
+    # -- Namespace label key allowed to scrape metrics.
+    label: metrics
+    # -- Namespace label value allowed to scrape metrics.
+    value: enabled
+
 webhook:
   # -- Enable validating webhook that enforces one DNSUpstreamPool per namespace
   enabled: false
@@ -113,17 +136,19 @@ webhook:
       # -- Issuer API group
       group: cert-manager.io
 
-coredns:
-  integration:
-    # -- Patch kube-system CoreDNS ConfigMap to forward external DNS to AstraDNS.
+clusterDNS:
+  # -- Cluster DNS provider that forwards external traffic to AstraDNS.
+  provider: coredns
+  forwardExternalToAstraDNS:
+    # -- Patch existing cluster DNS config to forward external DNS to AstraDNS.
     enabled: false
-    # -- Namespace where CoreDNS ConfigMap and deployment live.
+    # -- Namespace where the cluster DNS ConfigMap/deployment live.
     namespace: kube-system
-    # -- CoreDNS ConfigMap name.
+    # -- Cluster DNS ConfigMap name.
     configMapName: coredns
-    # -- CoreDNS deployment to restart after patching (empty disables restart).
+    # -- Cluster DNS deployment to restart after patching (empty disables restart).
     rolloutDeployment: coredns
-    # -- Upstream target injected into CoreDNS forward stanza.
+    # -- Upstream target injected into DNS forward stanza.
     forwardTarget: 169.254.20.11:5353
     # -- Kubectl image used by patch job.
     kubectlImage: bitnami/kubectl:1.31.4

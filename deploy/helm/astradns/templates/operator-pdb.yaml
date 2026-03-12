@@ -1,0 +1,14 @@
+{{- if .Values.operator.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "astradns.fullname" . }}-operator
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "astradns.operator.selectorLabels" . | nindent 6 }}
+  minAvailable: {{ .Values.operator.pdb.minAvailable }}
+{{- end }}
