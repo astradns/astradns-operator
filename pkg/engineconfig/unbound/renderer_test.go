@@ -40,6 +40,8 @@ func TestUnboundRendererRenderFullConfig(t *testing.T) {
 	expected := `server:
     interface: 0.0.0.0
     port: 5354
+    username: ""
+    chroot: ""
     do-daemonize: no
     use-syslog: no
     log-queries: no
@@ -175,6 +177,8 @@ func TestUnboundRendererRoundTrip(t *testing.T) {
 	expected := `server:
     interface: 127.0.0.1
     port: 5354
+    username: ""
+    chroot: ""
     do-daemonize: no
     use-syslog: no
     log-queries: no
