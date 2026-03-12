@@ -44,6 +44,8 @@ operator:
   serviceAccount:
     # -- Annotations for the operator service account
     annotations: {}
+    # -- Mount service account token in operator pods. Keep enabled for in-cluster API access.
+    automountServiceAccountToken: true
 
 agent:
   image:

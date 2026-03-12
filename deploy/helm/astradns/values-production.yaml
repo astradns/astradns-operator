@@ -50,6 +50,8 @@ clusterDNS:
 
 operator:
   priorityClassName: system-cluster-critical
+  serviceAccount:
+    automountServiceAccountToken: true
 
 networkPolicy:
   enabled: true
