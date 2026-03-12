@@ -62,8 +62,32 @@ spec:
               value: {{ .Values.agent.logSampleRate | quote }}
             - name: ASTRADNS_PROXY_TIMEOUT
               value: {{ .Values.agent.proxyTimeout | quote }}
+            - name: ASTRADNS_PROXY_CACHE_MAX_ENTRIES
+              value: {{ .Values.agent.proxyCacheMaxEntries | quote }}
+            - name: ASTRADNS_PROXY_CACHE_DEFAULT_TTL
+              value: {{ .Values.agent.proxyCacheDefaultTTL | quote }}
+            - name: ASTRADNS_ENGINE_CONN_POOL_SIZE
+              value: {{ .Values.agent.engineConnectionPoolSize | quote }}
+            - name: ASTRADNS_CONFIG_WATCH_DEBOUNCE
+              value: {{ .Values.agent.configWatchDebounce | quote }}
             - name: ASTRADNS_ENGINE_RECOVERY_INTERVAL
               value: {{ .Values.agent.engineRecoveryInterval | quote }}
+            - name: ASTRADNS_COMPONENT_ERROR_BUFFER
+              value: {{ .Values.agent.componentErrorBuffer | quote }}
+            - name: ASTRADNS_TRACING_ENABLED
+              value: {{ .Values.agent.tracing.enabled | quote }}
+            - name: ASTRADNS_TRACING_ENDPOINT
+              value: {{ .Values.agent.tracing.endpoint | quote }}
+            - name: ASTRADNS_TRACING_INSECURE
+              value: {{ .Values.agent.tracing.insecure | quote }}
+            - name: ASTRADNS_TRACING_SAMPLE_RATIO
+              value: {{ .Values.agent.tracing.sampleRatio | quote }}
+            - name: ASTRADNS_TRACING_SERVICE_NAME
+              value: {{ .Values.agent.tracing.serviceName | quote }}
+            {{- if .Values.agent.metrics.bearerToken }}
+            - name: ASTRADNS_METRICS_BEARER_TOKEN
+              value: {{ .Values.agent.metrics.bearerToken | quote }}
+            {{- end }}
           ports:
             {{- if eq $networkMode "hostPort" }}
             - name: dns-udp

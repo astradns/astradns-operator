@@ -396,3 +396,38 @@ func TestCoreDNSRendererZeroCacheValues(t *testing.T) {
 		})
 	}
 }
+
+func TestCoreDNSRendererSupportsDoTAndDoHTargets(t *testing.T) {
+	t.Parallel()
+
+	renderer := &CoreDNSRenderer{}
+	config := validCoreDNSConfig()
+	config.Upstreams = []engine.UpstreamConfig{
+		{Address: "dns.quad9.net", Transport: engine.UpstreamTransportDoT, TLSServerName: "resolver.example"},
+		{Address: "dns.google", Transport: engine.UpstreamTransportDoH, TLSServerName: "resolver.example"},
+	}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	if !strings.Contains(got, "tls://dns.quad9.net:853") {
+		t.Fatalf("expected DoT target in rendered Corefile\n%s", got)
+	}
+	if !strings.Contains(got, "https://dns.google:443") {
+		t.Fatalf("expected DoH target in rendered Corefile\n%s", got)
+	}
+}
+
+func TestCoreDNSRendererRejectsDNSSECMode(t *testing.T) {
+	t.Parallel()
+
+	renderer := &CoreDNSRenderer{}
+	config := validCoreDNSConfig()
+	config.DNSSEC.Mode = engine.DNSSECModeValidate
+
+	if _, err := renderer.Render(config); err == nil {
+		t.Fatal("expected DNSSEC mode validation error for CoreDNS renderer")
+	}
+}

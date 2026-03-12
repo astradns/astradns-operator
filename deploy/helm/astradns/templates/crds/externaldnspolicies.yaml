@@ -76,6 +76,81 @@ spec:
                 required:
                 - namespaces
                 type: object
+              splitHorizon:
+                description: |-
+                  SplitHorizon optionally defines source-aware DNS views with zone-specific routing.
+                  This models the API contract for split-horizon policy; enforcement is phased separately.
+                properties:
+                  views:
+                    description: Views is the ordered list of matching views. First
+                      match wins.
+                    items:
+                      description: SplitHorizonView describes a source-specific view.
+                      properties:
+                        name:
+                          description: Name is the stable view identifier.
+                          maxLength: 63
+                          minLength: 1
+                          type: string
+                        sourceCIDRs:
+                          description: SourceCIDRs is the list of source CIDRs matched
+                            by this view.
+                          items:
+                            type: string
+                          minItems: 1
+                          type: array
+                        zones:
+                          description: Zones defines zone-to-upstream routing within
+                            this view.
+                          items:
+                            description: SplitHorizonZoneRule maps a DNS zone to upstream/cache
+                              references.
+                            properties:
+                              cacheProfileRef:
+                                description: CacheProfileRef optionally references
+                                  a cache profile for this zone.
+                                properties:
+                                  name:
+                                    description: Name is the name of the referenced
+                                      resource.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              upstreamPoolRef:
+                                description: UpstreamPoolRef references the pool used
+                                  for this zone.
+                                properties:
+                                  name:
+                                    description: Name is the name of the referenced
+                                      resource.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              zone:
+                                description: Zone is the DNS suffix matched by this
+                                  rule (for example "corp.example.com").
+                                minLength: 1
+                                type: string
+                            required:
+                            - upstreamPoolRef
+                            - zone
+                            type: object
+                          minItems: 1
+                          type: array
+                      required:
+                      - name
+                      - sourceCIDRs
+                      - zones
+                      type: object
+                    minItems: 1
+                    type: array
+                required:
+                - views
+                type: object
               upstreamPoolRef:
                 description: UpstreamPoolRef references the DNSUpstreamPool to use.
                 properties:

@@ -214,9 +214,9 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
-	// --- Gap 15: CRD defaulting verification ---
+	// --- Gap 15: upstream transport default port rendering verification ---
 
-	It("defaults port to 53 when port is not specified via CRD marker", func() {
+	It("defaults dns upstream port to 53 when port is omitted", func() {
 		namespace := createNamespace("pool-default-port")
 		poolName := "pool-default-port"
 
@@ -239,10 +239,10 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 		)).To(Succeed())
 
 		Expect(created.Spec.Upstreams).To(HaveLen(1))
-		Expect(created.Spec.Upstreams[0].Port).To(Equal(int32(53)),
-			"expected CRD marker +kubebuilder:default=53 to set port to 53 when omitted")
+		Expect(created.Spec.Upstreams[0].Port).To(Equal(int32(0)),
+			"expected omitted port to remain unset in API object")
 
-		// Also verify the controller renders config successfully with the defaulted port.
+		// Also verify the controller renders config successfully with the computed default port.
 		Eventually(func(g Gomega) {
 			configMap := &corev1.ConfigMap{}
 			err := k8sClient.Get(context.Background(), types.NamespacedName{

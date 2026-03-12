@@ -26,8 +26,10 @@ func TestUnboundRendererRenderFullConfig(t *testing.T) {
 			PrefetchEnabled:   true,
 			PrefetchThreshold: 7,
 		},
-		ListenAddr: "0.0.0.0",
-		ListenPort: 5354,
+		ListenAddr:    "0.0.0.0",
+		ListenPort:    5354,
+		WorkerThreads: 2,
+		DNSSEC:        engine.DNSSECConfig{Mode: engine.DNSSECModeOff},
 	}
 
 	got, err := renderer.Render(config)
@@ -47,6 +49,8 @@ func TestUnboundRendererRenderFullConfig(t *testing.T) {
     cache-max-ttl: 120
     cache-max-negative-ttl: 20
     prefetch: yes
+    module-config: "iterator"
+    val-permissive-mode: yes
     serve-expired: yes
     num-threads: 2
     access-control: 127.0.0.0/8 allow
@@ -56,6 +60,7 @@ func TestUnboundRendererRenderFullConfig(t *testing.T) {
 
 forward-zone:
     name: "."
+    forward-tls-upstream: no
     forward-addr: 1.1.1.1
     forward-addr: 8.8.8.8@5353`
 
@@ -76,8 +81,9 @@ func TestUnboundRendererRenderDefaults(t *testing.T) {
 			PositiveTtlMax: 300,
 			NegativeTtl:    30,
 		},
-		ListenAddr: "127.0.0.1",
-		ListenPort: 5354,
+		ListenAddr:    "127.0.0.1",
+		ListenPort:    5354,
+		WorkerThreads: 2,
 	}
 
 	got, err := renderer.Render(config)
@@ -89,6 +95,7 @@ func TestUnboundRendererRenderDefaults(t *testing.T) {
 		"interface: 127.0.0.1",
 		"port: 5354",
 		"prefetch: no",
+		"forward-tls-upstream: no",
 		"forward-addr: 1.1.1.1",
 	}
 
@@ -111,8 +118,9 @@ func TestUnboundRendererRenderDefaultUpstreamPort(t *testing.T) {
 			PositiveTtlMax: 300,
 			NegativeTtl:    30,
 		},
-		ListenAddr: "127.0.0.1",
-		ListenPort: 5354,
+		ListenAddr:    "127.0.0.1",
+		ListenPort:    5354,
+		WorkerThreads: 2,
 	}
 
 	got, err := renderer.Render(config)
@@ -134,6 +142,7 @@ func TestUnboundRendererRoundTrip(t *testing.T) {
 	gen := &operatorconfig.DefaultConfigGenerator{}
 	pool := &v1alpha1.DNSUpstreamPool{
 		Spec: v1alpha1.DNSUpstreamPoolSpec{
+			Runtime: v1alpha1.RuntimeConfig{WorkerThreads: 2},
 			Upstreams: []v1alpha1.Upstream{
 				{Address: "1.1.1.1"},
 				{Address: "8.8.8.8", Port: 5353},
@@ -175,6 +184,8 @@ func TestUnboundRendererRoundTrip(t *testing.T) {
     cache-max-ttl: 180
     cache-max-negative-ttl: 20
     prefetch: yes
+    module-config: "iterator"
+    val-permissive-mode: yes
     serve-expired: yes
     num-threads: 2
     access-control: 127.0.0.0/8 allow
@@ -184,6 +195,7 @@ func TestUnboundRendererRoundTrip(t *testing.T) {
 
 forward-zone:
     name: "."
+    forward-tls-upstream: no
     forward-addr: 1.1.1.1
     forward-addr: 8.8.8.8@5353`
 
@@ -217,8 +229,10 @@ func validUnboundConfig() *engine.EngineConfig {
 			PositiveTtlMax: 300,
 			NegativeTtl:    30,
 		},
-		ListenAddr: "127.0.0.1",
-		ListenPort: 5354,
+		ListenAddr:    "127.0.0.1",
+		ListenPort:    5354,
+		WorkerThreads: 2,
+		DNSSEC:        engine.DNSSECConfig{Mode: engine.DNSSECModeOff},
 	}
 }
 
@@ -452,5 +466,39 @@ func TestUnboundRendererVeryLargeMaxEntriesCapped(t *testing.T) {
 	}
 	if !strings.Contains(got, "rrset-cache-size: 512m") {
 		t.Fatalf("Render() should cap rrset-cache-size at 512m for very large MaxEntries\nfull output:\n%s", got)
+	}
+}
+
+func TestUnboundRendererSupportsDoTUpstreams(t *testing.T) {
+	t.Parallel()
+
+	renderer := &UnboundRenderer{}
+	config := validUnboundConfig()
+	config.Upstreams = []engine.UpstreamConfig{
+		{Address: "dns.quad9.net", Transport: engine.UpstreamTransportDoT},
+	}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	if !strings.Contains(got, "forward-tls-upstream: yes") {
+		t.Fatalf("expected unbound forward-tls-upstream to be enabled\n%s", got)
+	}
+	if !strings.Contains(got, "forward-addr: dns.quad9.net@853") {
+		t.Fatalf("expected DoT upstream with default 853 port\n%s", got)
+	}
+}
+
+func TestUnboundRendererRejectsDoHUpstreams(t *testing.T) {
+	t.Parallel()
+
+	renderer := &UnboundRenderer{}
+	config := validUnboundConfig()
+	config.Upstreams = []engine.UpstreamConfig{{Address: "dns.google", Transport: engine.UpstreamTransportDoH}}
+
+	if _, err := renderer.Render(config); err == nil {
+		t.Fatal("expected error for DoH upstream in unbound renderer")
 	}
 }

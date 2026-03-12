@@ -21,7 +21,11 @@ func TestDefaultConfigGeneratorGenerateWithDefaults(t *testing.T) {
 		Spec: v1alpha1.DNSUpstreamPoolSpec{
 			Upstreams: []v1alpha1.Upstream{
 				{Address: "1.1.1.1"},
-				{Address: "8.8.8.8", Port: 5353},
+				{Address: "8.8.8.8", Port: 5353, Transport: "dns", Weight: 5, Preference: 10},
+			},
+			DNSSEC: v1alpha1.DNSSECConfig{Mode: "process"},
+			Runtime: v1alpha1.RuntimeConfig{
+				WorkerThreads: 6,
 			},
 		},
 	}
@@ -33,8 +37,8 @@ func TestDefaultConfigGeneratorGenerateWithDefaults(t *testing.T) {
 
 	want := &engine.EngineConfig{
 		Upstreams: []engine.UpstreamConfig{
-			{Address: "1.1.1.1", Port: 53},
-			{Address: "8.8.8.8", Port: 5353},
+			{Address: "8.8.8.8", Port: 5353, Transport: engine.UpstreamTransportDNS, Weight: 5, Preference: 10},
+			{Address: "1.1.1.1", Port: 53, Transport: engine.UpstreamTransportDNS, Weight: 1, Preference: 100},
 		},
 		Cache: engine.CacheConfig{
 			MaxEntries:        100000,
@@ -44,8 +48,12 @@ func TestDefaultConfigGeneratorGenerateWithDefaults(t *testing.T) {
 			PrefetchEnabled:   true,
 			PrefetchThreshold: 10,
 		},
-		ListenAddr: "127.0.0.1",
-		ListenPort: 5354,
+		ListenAddr:    "127.0.0.1",
+		ListenPort:    5354,
+		WorkerThreads: 6,
+		DNSSEC: engine.DNSSECConfig{
+			Mode: engine.DNSSECModeProcess,
+		},
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -96,6 +104,12 @@ func TestDefaultConfigGeneratorGenerateWithProfileOverrides(t *testing.T) {
 	}
 	if got.Cache.PrefetchThreshold != 5 {
 		t.Fatalf("PrefetchThreshold = %d, want %d", got.Cache.PrefetchThreshold, 5)
+	}
+	if got.WorkerThreads <= 0 {
+		t.Fatalf("WorkerThreads = %d, want positive value", got.WorkerThreads)
+	}
+	if got.DNSSEC.Mode != engine.DNSSECModeOff {
+		t.Fatalf("DNSSEC mode = %q, want %q", got.DNSSEC.Mode, engine.DNSSECModeOff)
 	}
 }
 
@@ -219,6 +233,42 @@ func TestDefaultConfigGeneratorAllZeroValueProfile(t *testing.T) {
 	}
 	if got.Cache.PrefetchThreshold != 10 {
 		t.Fatalf("PrefetchThreshold = %d, want %d (default)", got.Cache.PrefetchThreshold, 10)
+	}
+}
+
+func TestDefaultConfigGeneratorTransportPortsAndTLSDefaults(t *testing.T) {
+	t.Parallel()
+
+	gen := &DefaultConfigGenerator{}
+	pool := &v1alpha1.DNSUpstreamPool{
+		Spec: v1alpha1.DNSUpstreamPoolSpec{
+			Upstreams: []v1alpha1.Upstream{
+				{Address: "1.1.1.1"},
+				{Address: "dns.quad9.net", Transport: "dot"},
+				{Address: "dns.google", Transport: "doh"},
+			},
+		},
+	}
+
+	got, err := gen.Generate(pool, nil)
+	if err != nil {
+		t.Fatalf("Generate() returned error: %v", err)
+	}
+
+	if got.Upstreams[0].Port != 53 {
+		t.Fatalf("first upstream port = %d, want 53", got.Upstreams[0].Port)
+	}
+	if got.Upstreams[1].Port != 853 {
+		t.Fatalf("dot upstream port = %d, want 853", got.Upstreams[1].Port)
+	}
+	if got.Upstreams[2].Port != 443 {
+		t.Fatalf("doh upstream port = %d, want 443", got.Upstreams[2].Port)
+	}
+	if got.Upstreams[1].TLSServerName != "dns.quad9.net" {
+		t.Fatalf("dot tlsServerName = %q, want dns.quad9.net", got.Upstreams[1].TLSServerName)
+	}
+	if got.Upstreams[2].TLSServerName != "dns.google" {
+		t.Fatalf("doh tlsServerName = %q, want dns.google", got.Upstreams[2].TLSServerName)
 	}
 }
 

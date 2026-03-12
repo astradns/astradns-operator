@@ -48,6 +48,18 @@ spec:
           spec:
             description: DNSUpstreamPoolSpec defines the desired state of DNSUpstreamPool.
             properties:
+              dnssec:
+                description: DNSSEC configures resolver DNSSEC processing mode.
+                properties:
+                  mode:
+                    default: "off"
+                    description: Mode controls DNSSEC behavior for supported engines.
+                    enum:
+                    - "off"
+                    - process
+                    - validate
+                    type: string
+                type: object
               healthCheck:
                 description: HealthCheck configures health checking for upstreams.
                 properties:
@@ -92,6 +104,18 @@ spec:
                     - random
                     type: string
                 type: object
+              runtime:
+                description: Runtime configures engine runtime tuning.
+                properties:
+                  workerThreads:
+                    description: |-
+                      WorkerThreads is the number of worker threads to configure on supported engines.
+                      When omitted, the runtime selects a CPU-based default.
+                    format: int32
+                    maximum: 256
+                    minimum: 1
+                    type: integer
+                type: object
               upstreams:
                 description: Upstreams is the list of upstream DNS resolvers.
                 items:
@@ -105,11 +129,41 @@ spec:
                       pattern: ^[A-Za-z0-9]([A-Za-z0-9.:-]*[A-Za-z0-9])?$
                       type: string
                     port:
-                      default: 53
-                      description: Port is the port number of the upstream resolver.
-                        Defaults to 53.
+                      description: |-
+                        Port is the port number of the upstream resolver.
+                        When omitted, defaults are transport-specific (53 for dns, 853 for dot, 443 for doh).
                       format: int32
                       maximum: 65535
+                      minimum: 1
+                      type: integer
+                    preference:
+                      default: 100
+                      description: Preference is the upstream priority hint. Lower
+                        values are preferred.
+                      format: int32
+                      maximum: 1000
+                      minimum: 1
+                      type: integer
+                    tlsServerName:
+                      description: TLSServerName overrides SNI/hostname verification
+                        for TLS-based transports.
+                      maxLength: 253
+                      pattern: ^$|^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$
+                      type: string
+                    transport:
+                      default: dns
+                      description: 'Transport selects upstream protocol transport:
+                        dns, dot, or doh.'
+                      enum:
+                      - dns
+                      - dot
+                      - doh
+                      type: string
+                    weight:
+                      default: 1
+                      description: Weight is the relative upstream weight.
+                      format: int32
+                      maximum: 100
                       minimum: 1
                       type: integer
                   required:

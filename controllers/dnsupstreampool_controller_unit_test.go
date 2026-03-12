@@ -259,7 +259,7 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "port 0 is invalid",
+			name: "port 0 defaults for dns transport",
 			pool: &v1alpha1.DNSUpstreamPool{
 				Spec: v1alpha1.DNSUpstreamPoolSpec{
 					Upstreams: []v1alpha1.Upstream{
@@ -267,7 +267,7 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "port 65536 is invalid",
@@ -321,6 +321,63 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 						{Address: "1.1.1.1", Port: 53},
 						{Address: "1.1.1.1", Port: 53},
 					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid transport",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Transport: "bogus"}},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "dot transport defaults to 853",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{{Address: "dns.quad9.net", Transport: "dot"}},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "tlsServerName rejected for plain transport",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Transport: "dns", TLSServerName: "dns.example"}},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "dnssec validate mode accepted",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
+					DNSSEC:    v1alpha1.DNSSECConfig{Mode: "validate"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "dnssec invalid mode rejected",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
+					DNSSEC:    v1alpha1.DNSSECConfig{Mode: "strict"},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "workerThreads out of range rejected",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
+					Runtime:   v1alpha1.RuntimeConfig{WorkerThreads: 300},
 				},
 			},
 			wantErr: true,

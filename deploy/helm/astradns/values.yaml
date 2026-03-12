@@ -17,6 +17,9 @@ operator:
   replicas: 1
   # -- Enable leader election for HA operator deployments
   leaderElect: true
+  leaderElection:
+    # -- Lease identity used by controller-runtime leader election.
+    id: 60acac32.astradns.com
   resources:
     limits:
       cpu: 200m
@@ -44,8 +47,8 @@ operator:
   serviceAccount:
     # -- Annotations for the operator service account
     annotations: {}
-    # -- Mount service account token in operator pods. Keep enabled for in-cluster API access.
-    automountServiceAccountToken: true
+    # -- Mount service account token in operator pods. Set true explicitly for in-cluster API auth.
+    automountServiceAccountToken: false
   startupProbe:
     # -- Enable startup probe for the operator manager container.
     enabled: true
@@ -57,6 +60,12 @@ operator:
     timeoutSeconds: 3
     # -- Number of consecutive failures before startup probe fails.
     failureThreshold: 24
+  lifecycle:
+    preStop:
+      # -- Enable lifecycle preStop hook for graceful drain on shutdown.
+      enabled: true
+      # -- Number of seconds to sleep during preStop.
+      sleepSeconds: 5
 
 agent:
   image:
@@ -88,8 +97,32 @@ agent:
   logSampleRate: "0.1"
   # -- Timeout for proxy forwarding to local engine (Go duration).
   proxyTimeout: 2s
+  # -- Max DNS responses cached at proxy layer before forwarding to engine.
+  proxyCacheMaxEntries: 10000
+  # -- Fallback TTL for proxy cache entries without record TTL.
+  proxyCacheDefaultTTL: 30s
+  # -- Max reusable DNS connections per protocol to local engine.
+  engineConnectionPoolSize: 64
+  # -- Debounce delay before processing config watch updates.
+  configWatchDebounce: 1s
   # -- Interval to probe and auto-restart crashed engine subprocesses.
   engineRecoveryInterval: 5s
+  # -- Buffer size for component error channel.
+  componentErrorBuffer: 5
+  metrics:
+    # -- Optional bearer token required for /metrics access (empty disables token check).
+    bearerToken: ""
+  tracing:
+    # -- Enable OpenTelemetry tracing for agent control-plane operations.
+    enabled: false
+    # -- OTLP/HTTP collector endpoint used by the agent tracer.
+    endpoint: localhost:4318
+    # -- Use insecure OTLP transport (plaintext HTTP).
+    insecure: true
+    # -- Trace sampling ratio between 0 and 1.
+    sampleRatio: "0.1"
+    # -- Service name used by OpenTelemetry traces.
+    serviceName: astradns-agent
   resources:
     limits:
       cpu: 500m
@@ -146,6 +179,8 @@ networkPolicy:
 webhook:
   # -- Enable validating webhook that enforces one DNSUpstreamPool per namespace
   enabled: false
+  # -- Timeout for webhook calls in seconds.
+  timeoutSeconds: 5
   certManager:
     issuerRef:
       # -- Existing Issuer/ClusterIssuer name used to sign the webhook certificate

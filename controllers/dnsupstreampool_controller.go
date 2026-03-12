@@ -14,6 +14,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
+	"github.com/astradns/astradns-types/engine"
 	typesengineconfig "github.com/astradns/astradns-types/engineconfig"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
@@ -763,18 +764,92 @@ func validateDNSUpstreamPool(pool *v1alpha1.DNSUpstreamPool) error {
 		if !isValidUpstreamAddress(trimmedAddress) {
 			return fmt.Errorf("spec.upstreams[%d].address %q is not a valid IP or DNS name", i, upstream.Address)
 		}
-		if upstream.Port <= 0 || upstream.Port > 65535 {
+		transport, ok := parseUpstreamTransport(upstream.Transport)
+		if !ok {
+			return fmt.Errorf("spec.upstreams[%d].transport must be one of dns, dot, or doh", i)
+		}
+
+		port := upstream.Port
+		if port == 0 {
+			port = defaultUpstreamPortForTransport(transport)
+		}
+		if port <= 0 || port > 65535 {
 			return fmt.Errorf("spec.upstreams[%d].port must be between 1 and 65535", i)
 		}
 
-		upstreamKey := fmt.Sprintf("%s:%d", trimmedAddress, upstream.Port)
+		tlsServerName := strings.TrimSpace(upstream.TLSServerName)
+		if transport == engine.UpstreamTransportDNS && tlsServerName != "" {
+			return fmt.Errorf("spec.upstreams[%d].tlsServerName is only valid for dot or doh transport", i)
+		}
+		if tlsServerName != "" {
+			name := strings.TrimSuffix(tlsServerName, ".")
+			if name == "" || len(validation.IsDNS1123Subdomain(strings.ToLower(name))) > 0 {
+				return fmt.Errorf("spec.upstreams[%d].tlsServerName %q is not a valid DNS hostname", i, upstream.TLSServerName)
+			}
+		}
+
+		if upstream.Weight < 0 || upstream.Weight > 100 {
+			return fmt.Errorf("spec.upstreams[%d].weight must be between 1 and 100 when set", i)
+		}
+		if upstream.Preference < 0 || upstream.Preference > 1000 {
+			return fmt.Errorf("spec.upstreams[%d].preference must be between 1 and 1000 when set", i)
+		}
+
+		upstreamKey := fmt.Sprintf("%s:%s:%d", transport, trimmedAddress, port)
 		if _, exists := seenUpstreams[upstreamKey]; exists {
 			return fmt.Errorf("spec.upstreams[%d] %q is duplicated", i, upstreamKey)
 		}
 		seenUpstreams[upstreamKey] = struct{}{}
 	}
 
+	if pool.Spec.Runtime.WorkerThreads < 0 || pool.Spec.Runtime.WorkerThreads > 256 {
+		return errors.New("spec.runtime.workerThreads must be between 1 and 256 when set")
+	}
+
+	if _, ok := parseDNSSECMode(pool.Spec.DNSSEC.Mode); !ok {
+		return errors.New("spec.dnssec.mode must be one of off, process, or validate")
+	}
+
 	return nil
+}
+
+func parseUpstreamTransport(raw string) (engine.UpstreamTransport, bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	switch engine.UpstreamTransport(trimmed) {
+	case "", engine.UpstreamTransportDNS:
+		return engine.UpstreamTransportDNS, true
+	case engine.UpstreamTransportDoT:
+		return engine.UpstreamTransportDoT, true
+	case engine.UpstreamTransportDoH:
+		return engine.UpstreamTransportDoH, true
+	default:
+		return "", false
+	}
+}
+
+func defaultUpstreamPortForTransport(transport engine.UpstreamTransport) int32 {
+	switch transport {
+	case engine.UpstreamTransportDoT:
+		return 853
+	case engine.UpstreamTransportDoH:
+		return 443
+	default:
+		return 53
+	}
+}
+
+func parseDNSSECMode(raw string) (engine.DNSSECMode, bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	switch engine.DNSSECMode(trimmed) {
+	case "", engine.DNSSECModeOff:
+		return engine.DNSSECModeOff, true
+	case engine.DNSSECModeProcess:
+		return engine.DNSSECModeProcess, true
+	case engine.DNSSECModeValidate:
+		return engine.DNSSECModeValidate, true
+	default:
+		return "", false
+	}
 }
 
 func isValidUpstreamAddress(address string) bool {

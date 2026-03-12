@@ -50,6 +50,8 @@ clusterDNS:
 
 operator:
   priorityClassName: system-cluster-critical
+  leaderElection:
+    id: 60acac32.astradns.com
   serviceAccount:
     automountServiceAccountToken: true
 

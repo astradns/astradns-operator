@@ -28,5 +28,5 @@ webhooks:
         resources:
           - dnsupstreampools
     sideEffects: None
-    timeoutSeconds: 5
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
 {{- end }}

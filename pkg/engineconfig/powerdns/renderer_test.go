@@ -26,8 +26,10 @@ func TestPowerDNSRendererRenderFullConfig(t *testing.T) {
 			PrefetchEnabled:   true,
 			PrefetchThreshold: 7,
 		},
-		ListenAddr: "0.0.0.0",
-		ListenPort: 5354,
+		ListenAddr:    "0.0.0.0",
+		ListenPort:    5354,
+		WorkerThreads: 2,
+		DNSSEC:        engine.DNSSECConfig{Mode: engine.DNSSECModeOff},
 	}
 
 	got, err := renderer.Render(config)
@@ -47,6 +49,7 @@ max-cache-entries=4096
 max-negative-ttl=20
 minimum-ttl-override=30
 max-cache-ttl=120
+dnssec=off
 forward-zones=.=1.1.1.1:53;8.8.8.8:5353
 allow-from=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`
 
@@ -67,8 +70,9 @@ func TestPowerDNSRendererRenderDefaults(t *testing.T) {
 			PositiveTtlMax: 300,
 			NegativeTtl:    30,
 		},
-		ListenAddr: "127.0.0.1",
-		ListenPort: 5354,
+		ListenAddr:    "127.0.0.1",
+		ListenPort:    5354,
+		WorkerThreads: 2,
 	}
 
 	got, err := renderer.Render(config)
@@ -80,6 +84,7 @@ func TestPowerDNSRendererRenderDefaults(t *testing.T) {
 		"local-address=127.0.0.1",
 		"local-port=5354",
 		"max-cache-entries=100000",
+		"dnssec=off",
 		"forward-zones=.=1.1.1.1:53",
 	}
 
@@ -96,6 +101,7 @@ func TestPowerDNSRendererRoundTrip(t *testing.T) {
 	gen := &operatorconfig.DefaultConfigGenerator{}
 	pool := &v1alpha1.DNSUpstreamPool{
 		Spec: v1alpha1.DNSUpstreamPoolSpec{
+			Runtime: v1alpha1.RuntimeConfig{WorkerThreads: 2},
 			Upstreams: []v1alpha1.Upstream{
 				{Address: "1.1.1.1"},
 				{Address: "8.8.8.8", Port: 5353},
@@ -137,6 +143,7 @@ max-cache-entries=2048
 max-negative-ttl=20
 minimum-ttl-override=45
 max-cache-ttl=180
+dnssec=off
 forward-zones=.=1.1.1.1:53;8.8.8.8:5353
 allow-from=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`
 
@@ -170,8 +177,10 @@ func validPowerDNSConfig() *engine.EngineConfig {
 			PositiveTtlMax: 300,
 			NegativeTtl:    30,
 		},
-		ListenAddr: "127.0.0.1",
-		ListenPort: 5354,
+		ListenAddr:    "127.0.0.1",
+		ListenPort:    5354,
+		WorkerThreads: 2,
+		DNSSEC:        engine.DNSSECConfig{Mode: engine.DNSSECModeOff},
 	}
 }
 
@@ -361,5 +370,17 @@ func TestPowerDNSRendererZeroCacheValues(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPowerDNSRendererRejectsEncryptedTransports(t *testing.T) {
+	t.Parallel()
+
+	renderer := &PowerDNSRenderer{}
+	config := validPowerDNSConfig()
+	config.Upstreams = []engine.UpstreamConfig{{Address: "dns.google", Transport: engine.UpstreamTransportDoH}}
+
+	if _, err := renderer.Render(config); err == nil {
+		t.Fatal("expected error for encrypted upstream transport in PowerDNS renderer")
 	}
 }
