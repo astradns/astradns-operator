@@ -201,15 +201,15 @@ func resolveWorkerThreads(value int32) int32 {
 		return value
 	}
 
-	auto := int32(runtime.NumCPU())
-	if auto <= 0 {
+	cpuCount := runtime.NumCPU()
+	if cpuCount <= 0 {
 		return defaultWorkerThreads
 	}
-	if auto > maxWorkerThreads {
+	if cpuCount > int(maxWorkerThreads) {
 		return maxWorkerThreads
 	}
 
-	return auto
+	return int32(cpuCount)
 }
 
 func normalizeDomainFilterAction(action string) engine.DomainFilterAction {

@@ -157,15 +157,15 @@ func normalizeWorkerThreads(value int32) int32 {
 		return value
 	}
 
-	auto := int32(runtime.NumCPU())
-	if auto <= 0 {
+	cpuCount := runtime.NumCPU()
+	if cpuCount <= 0 {
 		return 2
 	}
-	if auto > 256 {
+	if cpuCount > 256 {
 		return 256
 	}
 
-	return auto
+	return int32(cpuCount)
 }
 
 func defaultTLSServerName(address string) string {

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
@@ -62,6 +63,7 @@ func Run(cmd *exec.Cmd) (string, error) {
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+	// #nosec G204 -- test helper executes trusted kubectl binary with known arguments.
 	cmd := exec.Command("kubectl", "delete", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
@@ -73,6 +75,7 @@ func UninstallCertManager() {
 		"cert-manager-controller",
 	}
 	for _, lease := range kubeSystemLeases {
+		// #nosec G204 -- test helper executes trusted kubectl binary with known arguments.
 		cmd = exec.Command("kubectl", "delete", "lease", lease,
 			"-n", "kube-system", "--ignore-not-found", "--force", "--grace-period=0")
 		if _, err := Run(cmd); err != nil {
@@ -84,6 +87,7 @@ func UninstallCertManager() {
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+	// #nosec G204 -- test helper executes trusted kubectl binary with known arguments.
 	cmd := exec.Command("kubectl", "apply", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		return err
@@ -142,8 +146,12 @@ func LoadImageToKindClusterWithName(name string) error {
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
 	kindBinary := defaultKindBinary
 	if v, ok := os.LookupEnv("KIND"); ok {
-		kindBinary = v
+		trimmed := strings.TrimSpace(v)
+		if trimmed != "" {
+			kindBinary = filepath.Clean(trimmed)
+		}
 	}
+	// #nosec G204 -- KIND override is intentionally supported for test environments.
 	cmd := exec.Command(kindBinary, kindOptions...)
 	_, err := Run(cmd)
 	return err
@@ -176,11 +184,15 @@ func GetProjectDir() (string, error) {
 // UncommentCode searches for target in the file and remove the comment prefix
 // of the target content. The target content may span multiple lines.
 func UncommentCode(filename, target, prefix string) error {
-	// false positive
-	// nolint:gosec
-	content, err := os.ReadFile(filename)
+	resolvedPath, err := resolveProjectFilePath(filename)
 	if err != nil {
-		return fmt.Errorf("failed to read file %q: %w", filename, err)
+		return err
+	}
+
+	// #nosec G304 -- resolvedPath is restricted to the project directory.
+	content, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read file %q: %w", resolvedPath, err)
 	}
 	strContent := string(content)
 
@@ -216,11 +228,45 @@ func UncommentCode(filename, target, prefix string) error {
 		return fmt.Errorf("failed to write to output: %w", err)
 	}
 
-	// false positive
-	// nolint:gosec
-	if err = os.WriteFile(filename, out.Bytes(), 0644); err != nil {
-		return fmt.Errorf("failed to write file %q: %w", filename, err)
+	if err = os.WriteFile(resolvedPath, out.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("failed to write file %q: %w", resolvedPath, err)
 	}
 
 	return nil
+}
+
+func resolveProjectFilePath(filename string) (string, error) {
+	projectDir, err := GetProjectDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve project dir: %w", err)
+	}
+
+	cleaned := filepath.Clean(filename)
+	if cleaned == "." {
+		return "", fmt.Errorf("invalid filename %q", filename)
+	}
+
+	candidate := cleaned
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(projectDir, cleaned)
+	}
+
+	projectAbs, err := filepath.Abs(projectDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve project absolute path: %w", err)
+	}
+	fileAbs, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve file absolute path: %w", err)
+	}
+
+	rel, err := filepath.Rel(projectAbs, fileAbs)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve relative path: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("file path %q escapes project directory %q", filename, projectAbs)
+	}
+
+	return fileAbs, nil
 }
