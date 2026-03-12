@@ -12,6 +12,9 @@ agent:
     mode: linkLocal
     linkLocalIP: 169.254.20.11
 
+  serviceAccount:
+    automountServiceAccountToken: false
+
   priorityClassName: system-cluster-critical
   proxyTimeout: 2s
   engineRecoveryInterval: 5s

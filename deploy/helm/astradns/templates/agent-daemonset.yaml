@@ -27,6 +27,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       {{- end }}
       serviceAccountName: {{ include "astradns.fullname" . }}-agent
+      automountServiceAccountToken: {{ .Values.agent.serviceAccount.automountServiceAccountToken }}
       {{- if .Values.agent.priorityClassName }}
       priorityClassName: {{ .Values.agent.priorityClassName | quote }}
       {{- end }}

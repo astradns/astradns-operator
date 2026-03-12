@@ -104,6 +104,8 @@ agent:
   serviceAccount:
     # -- Annotations for the agent service account
     annotations: {}
+    # -- Mount service account token in agent pods. Disable when API access is not needed.
+    automountServiceAccountToken: false
 
 crds:
   # -- Install CRDs with the chart

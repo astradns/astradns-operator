@@ -56,6 +56,7 @@ The chart includes a production profile at `deploy/helm/astradns/values-producti
 - Link-local data path (`agent.network.mode=linkLocal`, `169.254.20.11`)
 - Optional cluster DNS integration job (`clusterDNS.forwardExternalToAstraDNS.enabled=true`)
 - PodDisruptionBudgets + NetworkPolicies + PriorityClass defaults
+- Agent service account token automount disabled by default
 - ServiceMonitor and Grafana dashboard ConfigMap enabled
 - Validating webhook enabled (cert-manager issuer still required)
 
