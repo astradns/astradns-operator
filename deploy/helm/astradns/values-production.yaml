@@ -1,0 +1,50 @@
+# Production profile for AstraDNS Helm chart.
+#
+# Usage:
+#   helm upgrade --install astradns deploy/helm/astradns \
+#     -n astradns-system --create-namespace \
+#     -f deploy/helm/astradns/values-production.yaml \
+#     --set webhook.certManager.issuerRef.name=<cluster-issuer-name>
+
+agent:
+  # Use node-local mode for deterministic same-node forwarding from CoreDNS.
+  network:
+    mode: linkLocal
+    linkLocalIP: 169.254.20.11
+
+  # Optional image strategy: set explicit image repositories by engine.
+  # Keep empty to reuse agent.image repository/tag.
+  engineImages:
+    unbound:
+      repository: ""
+      tag: ""
+    coredns:
+      repository: ""
+      tag: ""
+    powerdns:
+      repository: ""
+      tag: ""
+
+coredns:
+  integration:
+    enabled: true
+    namespace: kube-system
+    configMapName: coredns
+    rolloutDeployment: coredns
+    forwardTarget: 169.254.20.11:5353
+
+serviceMonitor:
+  enabled: true
+
+grafana:
+  dashboards:
+    enabled: true
+
+webhook:
+  enabled: true
+  certManager:
+    issuerRef:
+      # REQUIRED override for production installation.
+      name: ""
+      kind: ClusterIssuer
+      group: cert-manager.io

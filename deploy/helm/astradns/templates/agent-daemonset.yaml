@@ -21,6 +21,11 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- $networkMode := include "astradns.agent.network.mode" . }}
+      {{- if eq $networkMode "linkLocal" }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       serviceAccountName: {{ include "astradns.fullname" . }}-agent
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -40,7 +45,7 @@ spec:
             - name: ASTRADNS_CONFIG_PATH
               value: /etc/astradns/config
             - name: ASTRADNS_LISTEN_ADDR
-              value: "0.0.0.0:5353"
+              value: {{ include "astradns.agent.listenAddr" . | quote }}
             - name: ASTRADNS_ENGINE_ADDR
               value: "127.0.0.1:5354"
             - name: ASTRADNS_METRICS_ADDR
@@ -52,6 +57,7 @@ spec:
             - name: ASTRADNS_LOG_SAMPLE_RATE
               value: {{ .Values.agent.logSampleRate | quote }}
           ports:
+            {{- if eq $networkMode "hostPort" }}
             - name: dns-udp
               containerPort: 5353
               hostPort: 5353
@@ -60,6 +66,14 @@ spec:
               containerPort: 5353
               hostPort: 5353
               protocol: TCP
+            {{- else }}
+            - name: dns-udp
+              containerPort: 5353
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 5353
+              protocol: TCP
+            {{- end }}
             - name: metrics
               containerPort: 9153
               protocol: TCP

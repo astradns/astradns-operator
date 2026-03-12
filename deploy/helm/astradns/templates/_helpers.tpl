@@ -92,8 +92,40 @@ Operator image
 Agent image
 */}}
 {{- define "astradns.agent.image" -}}
-{{- $tag := default .Chart.AppVersion .Values.agent.image.tag }}
-{{- printf "%s:%s" .Values.agent.image.repository $tag }}
+{{- $engine := default "unbound" .Values.agent.engineType -}}
+{{- $repository := .Values.agent.image.repository -}}
+{{- $tag := default .Chart.AppVersion .Values.agent.image.tag -}}
+{{- $engineImages := default (dict) .Values.agent.engineImages -}}
+{{- if hasKey $engineImages $engine -}}
+{{- $engineCfg := index $engineImages $engine -}}
+{{- $engineRepo := trim (default "" $engineCfg.repository) -}}
+{{- if ne $engineRepo "" -}}
+{{- $repository = $engineRepo -}}
+{{- $tag = default $tag $engineCfg.tag -}}
+{{- end -}}
+{{- end -}}
+{{- printf "%s:%s" $repository $tag -}}
+{{- end }}
+
+{{/*
+Agent DNS listen address
+*/}}
+{{- define "astradns.agent.listenAddr" -}}
+{{- $mode := default "hostPort" .Values.agent.network.mode -}}
+{{- if eq $mode "linkLocal" -}}
+{{- printf "%s:5353" .Values.agent.network.linkLocalIP -}}
+{{- else if eq $mode "hostPort" -}}
+0.0.0.0:5353
+{{- else -}}
+{{- fail "agent.network.mode must be one of: hostPort, linkLocal" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Agent data-path mode helpers
+*/}}
+{{- define "astradns.agent.network.mode" -}}
+{{- default "hostPort" .Values.agent.network.mode -}}
 {{- end }}
 
 {{/*

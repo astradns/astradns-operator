@@ -1,0 +1,57 @@
+{{- if .Values.coredns.integration.enabled }}
+{{- if ne (include "astradns.agent.network.mode" .) "linkLocal" }}
+{{- fail "coredns.integration.enabled requires agent.network.mode=linkLocal" }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "astradns.fullname" . }}-coredns-patcher
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "astradns.fullname" . }}-coredns-patcher
+  namespace: {{ .Values.coredns.integration.namespace }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - {{ .Values.coredns.integration.configMapName }}
+    verbs:
+      - get
+      - patch
+  {{- if .Values.coredns.integration.rolloutDeployment }}
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - {{ .Values.coredns.integration.rolloutDeployment }}
+    verbs:
+      - get
+      - patch
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "astradns.fullname" . }}-coredns-patcher
+  namespace: {{ .Values.coredns.integration.namespace }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "astradns.fullname" . }}-coredns-patcher
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "astradns.fullname" . }}-coredns-patcher
+    namespace: {{ include "astradns.namespace" . }}
+{{- end }}

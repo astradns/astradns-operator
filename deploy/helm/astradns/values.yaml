@@ -43,8 +43,25 @@ agent:
     repository: astradns/agent
     tag: ""  # Defaults to appVersion
     pullPolicy: IfNotPresent
+  # -- Optional engine-specific image overrides keyed by engine type.
+  # -- When repository is empty for the selected engine, chart falls back to agent.image.
+  engineImages:
+    unbound:
+      repository: ""
+      tag: ""
+    coredns:
+      repository: ""
+      tag: ""
+    powerdns:
+      repository: ""
+      tag: ""
   # -- DNS engine type: unbound, coredns, or powerdns
   engineType: unbound
+  network:
+    # -- Data-path mode for agent DNS listener: hostPort or linkLocal
+    mode: hostPort
+    # -- Link-local IP used when mode=linkLocal
+    linkLocalIP: 169.254.20.11
   # -- Log mode: sampled or full
   logMode: sampled
   # -- Log sample rate when logMode is sampled
@@ -95,6 +112,21 @@ webhook:
       kind: ClusterIssuer
       # -- Issuer API group
       group: cert-manager.io
+
+coredns:
+  integration:
+    # -- Patch kube-system CoreDNS ConfigMap to forward external DNS to AstraDNS.
+    enabled: false
+    # -- Namespace where CoreDNS ConfigMap and deployment live.
+    namespace: kube-system
+    # -- CoreDNS ConfigMap name.
+    configMapName: coredns
+    # -- CoreDNS deployment to restart after patching (empty disables restart).
+    rolloutDeployment: coredns
+    # -- Upstream target injected into CoreDNS forward stanza.
+    forwardTarget: 169.254.20.11:5353
+    # -- Kubectl image used by patch job.
+    kubectlImage: bitnami/kubectl:1.31.4
 
 grafana:
   dashboards:

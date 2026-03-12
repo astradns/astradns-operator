@@ -1,0 +1,87 @@
+{{- if .Values.coredns.integration.enabled }}
+{{- if ne (include "astradns.agent.network.mode" .) "linkLocal" }}
+{{- fail "coredns.integration.enabled requires agent.network.mode=linkLocal" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astradns.fullname" . }}-coredns-patch
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        {{- include "astradns.operator.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "astradns.fullname" . }}-coredns-patcher
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: coredns-patcher
+          image: {{ .Values.coredns.integration.kubectlImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              namespace="{{ .Values.coredns.integration.namespace }}"
+              configmap="{{ .Values.coredns.integration.configMapName }}"
+              forward_target="{{ .Values.coredns.integration.forwardTarget }}"
+              rollout_deployment="{{ .Values.coredns.integration.rolloutDeployment }}"
+
+              corefile_path="/tmp/Corefile"
+              backup_path="/tmp/Corefile.backup"
+              patch_file="/tmp/patch.yaml"
+
+              kubectl -n "${namespace}" get configmap "${configmap}" -o jsonpath='{.data.Corefile}' > "${corefile_path}"
+              cp "${corefile_path}" "${backup_path}"
+
+              if grep -Eq "forward \\. ${forward_target}([[:space:]]|$)" "${corefile_path}"; then
+                echo "CoreDNS already forwards to ${forward_target}"
+              elif grep -Eq 'forward \\. /etc/resolv\.conf([[:space:]]|$)' "${corefile_path}"; then
+                sed -i "s|forward \\. /etc/resolv\\.conf|forward . ${forward_target}|g" "${corefile_path}"
+                echo "Updated CoreDNS forward target from /etc/resolv.conf to ${forward_target}"
+              elif grep -Eq 'forward \\. [^[:space:]]+([[:space:]]|$)' "${corefile_path}"; then
+                sed -i "0,/forward \\. [^[:space:]]\\+/s//forward . ${forward_target}/" "${corefile_path}"
+                echo "Updated first CoreDNS forward target to ${forward_target}"
+              else
+                echo "No CoreDNS forward stanza found in ${namespace}/${configmap}" >&2
+                exit 1
+              fi
+
+              {
+                echo "data:"
+                echo "  Corefile: |"
+                sed 's/^/    /' "${corefile_path}"
+                echo "  Corefile.astradns.backup: |"
+                sed 's/^/    /' "${backup_path}"
+              } > "${patch_file}"
+
+              kubectl -n "${namespace}" patch configmap "${configmap}" --type merge --patch-file "${patch_file}"
+
+              if [ -n "${rollout_deployment}" ]; then
+                kubectl -n "${namespace}" rollout restart deployment/${rollout_deployment}
+              fi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}
