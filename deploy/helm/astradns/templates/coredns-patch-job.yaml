@@ -5,6 +5,23 @@
 {{- if ne (lower .Values.clusterDNS.provider) "coredns" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS currently supports only clusterDNS.provider=coredns" }}
 {{- end }}
+{{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
+{{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
+{{- $clusterDNSForwardTarget := trim .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}
+{{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
+{{- $clusterDNSKubectlImage := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage }}
+{{- if eq $clusterDNSNamespace "" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.namespace must not be empty" }}
+{{- end }}
+{{- if eq $clusterDNSConfigMapName "" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.configMapName must not be empty" }}
+{{- end }}
+{{- if eq $clusterDNSForwardTarget "" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.forwardTarget must not be empty" }}
+{{- end }}
+{{- if eq $clusterDNSKubectlImage "" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.kubectlImage must not be empty" }}
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -31,16 +48,16 @@ spec:
           type: RuntimeDefault
       containers:
         - name: coredns-patcher
-          image: {{ .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage | quote }}
+          image: {{ $clusterDNSKubectlImage | quote }}
           imagePullPolicy: {{ .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImagePullPolicy | quote }}
           command:
             - /bin/sh
             - -ec
             - |
-              namespace="{{ .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}"
-              configmap="{{ .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}"
-              forward_target="{{ .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}"
-              rollout_deployment="{{ .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}"
+              namespace="{{ $clusterDNSNamespace }}"
+              configmap="{{ $clusterDNSConfigMapName }}"
+              forward_target="{{ $clusterDNSForwardTarget }}"
+              rollout_deployment="{{ $clusterDNSRolloutDeployment }}"
 
               corefile_path="/tmp/Corefile"
               backup_path="/tmp/Corefile.backup"

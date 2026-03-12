@@ -5,6 +5,15 @@
 {{- if ne (lower .Values.clusterDNS.provider) "coredns" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS currently supports only clusterDNS.provider=coredns" }}
 {{- end }}
+{{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
+{{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
+{{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
+{{- if eq $clusterDNSNamespace "" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.namespace must not be empty" }}
+{{- end }}
+{{- if eq $clusterDNSConfigMapName "" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.configMapName must not be empty" }}
+{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -17,7 +26,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "astradns.fullname" . }}-coredns-patcher
-  namespace: {{ .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
+  namespace: {{ $clusterDNSNamespace }}
   labels:
     {{- include "astradns.operator.labels" . | nindent 4 }}
 rules:
@@ -26,17 +35,17 @@ rules:
     resources:
       - configmaps
     resourceNames:
-      - {{ .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
+      - {{ $clusterDNSConfigMapName }}
     verbs:
       - get
       - patch
-  {{- if .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
+  {{- if $clusterDNSRolloutDeployment }}
   - apiGroups:
       - apps
     resources:
       - deployments
     resourceNames:
-      - {{ .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
+      - {{ $clusterDNSRolloutDeployment }}
     verbs:
       - get
       - patch
@@ -46,7 +55,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "astradns.fullname" . }}-coredns-patcher
-  namespace: {{ .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
+  namespace: {{ $clusterDNSNamespace }}
   labels:
     {{- include "astradns.operator.labels" . | nindent 4 }}
 roleRef:
