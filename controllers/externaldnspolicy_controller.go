@@ -191,6 +191,7 @@ func (r *ExternalDNSPolicyReconciler) setValidatedCondition(
 		Reason:             reason,
 		Message:            message,
 	})
+	policy.Status.ObservedGeneration = policy.Generation
 
 	if err := r.Status().Patch(ctx, policy, client.MergeFrom(base)); err != nil {
 		return fmt.Errorf("update ExternalDNSPolicy status: %w", err)

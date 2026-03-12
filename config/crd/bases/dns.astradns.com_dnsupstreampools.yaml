@@ -11,10 +11,19 @@ spec:
     kind: DNSUpstreamPool
     listKind: DNSUpstreamPoolList
     plural: dnsupstreampools
+    shortNames:
+    - dnsup
     singular: dnsupstreampool
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .spec.loadBalancing.strategy
+      name: Strategy
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: DNSUpstreamPool is a pool of upstream DNS resolvers.
@@ -170,6 +179,11 @@ spec:
                   - type
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation acted
+                  on by the controller.
+                format: int64
+                type: integer
               upstreamStatuses:
                 description: UpstreamStatuses contains the health status of each upstream.
                 items:

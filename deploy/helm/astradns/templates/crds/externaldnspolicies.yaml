@@ -15,10 +15,19 @@ spec:
     kind: ExternalDNSPolicy
     listKind: ExternalDNSPolicyList
     plural: externaldnspolicies
+    shortNames:
+    - edp
     singular: externaldnspolicy
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Validated")].status
+      name: Validated
+      type: string
+    - jsonPath: .status.appliedNodes
+      name: AppliedNodes
+      type: integer
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ExternalDNSPolicy defines per-namespace DNS resolution policy.
@@ -147,6 +156,11 @@ spec:
                   - type
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation acted
+                  on by the controller.
+                format: int64
+                type: integer
             type: object
         type: object
     served: true

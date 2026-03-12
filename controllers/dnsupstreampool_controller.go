@@ -473,6 +473,7 @@ func (r *DNSUpstreamPoolReconciler) setReadyCondition(
 		Reason:             reason,
 		Message:            message,
 	})
+	pool.Status.ObservedGeneration = pool.Generation
 
 	if err := r.Status().Patch(ctx, pool, client.MergeFrom(base)); err != nil {
 		return fmt.Errorf("update DNSUpstreamPool status: %w", err)

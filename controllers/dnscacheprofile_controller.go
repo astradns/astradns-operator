@@ -98,6 +98,7 @@ func (r *DNSCacheProfileReconciler) setActiveCondition(
 		Reason:             reason,
 		Message:            message,
 	})
+	profile.Status.ObservedGeneration = profile.Generation
 
 	if err := r.Status().Patch(ctx, profile, client.MergeFrom(base)); err != nil {
 		return fmt.Errorf("update DNSCacheProfile status: %w", err)

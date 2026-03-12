@@ -11,10 +11,19 @@ spec:
     kind: DNSCacheProfile
     listKind: DNSCacheProfileList
     plural: dnscacheprofiles
+    shortNames:
+    - dcp
     singular: dnscacheprofile
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Active")].status
+      name: Active
+      type: string
+    - jsonPath: .spec.maxEntries
+      name: MaxEntries
+      type: integer
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: DNSCacheProfile configures DNS cache behavior.
@@ -156,6 +165,11 @@ spec:
                   - type
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation acted
+                  on by the controller.
+                format: int64
+                type: integer
             type: object
         type: object
     served: true
