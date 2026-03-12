@@ -491,13 +491,26 @@ func validateDNSUpstreamPool(pool *v1alpha1.DNSUpstreamPool) error {
 		return errors.New("spec.upstreams must contain at least one upstream")
 	}
 
+	seenUpstreams := make(map[string]struct{}, len(pool.Spec.Upstreams))
+
 	for i, upstream := range pool.Spec.Upstreams {
-		if !isValidUpstreamAddress(upstream.Address) {
+		trimmedAddress := strings.TrimSpace(upstream.Address)
+		if upstream.Address != trimmedAddress {
+			return fmt.Errorf("spec.upstreams[%d].address must not include leading or trailing whitespace", i)
+		}
+
+		if !isValidUpstreamAddress(trimmedAddress) {
 			return fmt.Errorf("spec.upstreams[%d].address %q is not a valid IP or DNS name", i, upstream.Address)
 		}
 		if upstream.Port <= 0 || upstream.Port > 65535 {
 			return fmt.Errorf("spec.upstreams[%d].port must be between 1 and 65535", i)
 		}
+
+		upstreamKey := fmt.Sprintf("%s:%d", trimmedAddress, upstream.Port)
+		if _, exists := seenUpstreams[upstreamKey]; exists {
+			return fmt.Errorf("spec.upstreams[%d] %q is duplicated", i, upstreamKey)
+		}
+		seenUpstreams[upstreamKey] = struct{}{}
 	}
 
 	return nil

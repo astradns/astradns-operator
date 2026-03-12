@@ -137,6 +137,17 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "address with leading whitespace is invalid",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{
+						{Address: " 1.1.1.1", Port: 53},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
 			name: "port 0 is invalid",
 			pool: &v1alpha1.DNSUpstreamPool{
 				Spec: v1alpha1.DNSUpstreamPoolSpec{
@@ -186,6 +197,18 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 				Spec: v1alpha1.DNSUpstreamPoolSpec{
 					Upstreams: []v1alpha1.Upstream{
 						{Address: "1.1.1.1", Port: -1},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "duplicate upstream address and port is invalid",
+			pool: &v1alpha1.DNSUpstreamPool{
+				Spec: v1alpha1.DNSUpstreamPoolSpec{
+					Upstreams: []v1alpha1.Upstream{
+						{Address: "1.1.1.1", Port: 53},
+						{Address: "1.1.1.1", Port: 53},
 					},
 				},
 			},
