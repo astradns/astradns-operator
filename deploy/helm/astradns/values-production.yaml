@@ -13,6 +13,8 @@ agent:
     linkLocalIP: 169.254.20.11
 
   priorityClassName: system-cluster-critical
+  proxyTimeout: 2s
+  engineRecoveryInterval: 5s
 
   # Optional image strategy: set explicit image repositories by engine.
   # Keep empty to reuse agent.image repository/tag.

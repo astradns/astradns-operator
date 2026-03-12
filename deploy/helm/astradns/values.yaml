@@ -73,6 +73,10 @@ agent:
   logMode: sampled
   # -- Log sample rate when logMode is sampled
   logSampleRate: "0.1"
+  # -- Timeout for proxy forwarding to local engine (Go duration).
+  proxyTimeout: 2s
+  # -- Interval to probe and auto-restart crashed engine subprocesses.
+  engineRecoveryInterval: 5s
   resources:
     limits:
       cpu: 500m

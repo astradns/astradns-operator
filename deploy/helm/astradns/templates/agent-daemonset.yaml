@@ -59,6 +59,10 @@ spec:
               value: {{ .Values.agent.logMode | quote }}
             - name: ASTRADNS_LOG_SAMPLE_RATE
               value: {{ .Values.agent.logSampleRate | quote }}
+            - name: ASTRADNS_PROXY_TIMEOUT
+              value: {{ .Values.agent.proxyTimeout | quote }}
+            - name: ASTRADNS_ENGINE_RECOVERY_INTERVAL
+              value: {{ .Values.agent.engineRecoveryInterval | quote }}
           ports:
             {{- if eq $networkMode "hostPort" }}
             - name: dns-udp
