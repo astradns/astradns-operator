@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -140,6 +141,19 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 ) error {
 	if policy == nil {
 		return errors.New("external dns policy is nil")
+	}
+
+	if len(policy.Spec.Selector.Namespaces) == 0 {
+		return errors.New("spec.selector.namespaces must contain at least one namespace")
+	}
+	for i, namespace := range policy.Spec.Selector.Namespaces {
+		trimmed := strings.TrimSpace(namespace)
+		if trimmed == "" {
+			return fmt.Errorf("spec.selector.namespaces[%d] must not be empty", i)
+		}
+		if errs := validation.IsDNS1123Label(trimmed); len(errs) > 0 {
+			return fmt.Errorf("spec.selector.namespaces[%d] %q is not a valid namespace name", i, namespace)
+		}
 	}
 
 	upstreamPoolName := strings.TrimSpace(policy.Spec.UpstreamPoolRef.Name)
