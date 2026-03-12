@@ -8,11 +8,22 @@
 {{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
 {{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
 {{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
+{{- $dnsLabelPattern := "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" }}
+{{- $dnsSubdomainPattern := "^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" }}
 {{- if eq $clusterDNSNamespace "" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.namespace must not be empty" }}
 {{- end }}
+{{- if not (regexMatch $dnsLabelPattern $clusterDNSNamespace) }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.namespace must be a valid DNS-1123 label" }}
+{{- end }}
 {{- if eq $clusterDNSConfigMapName "" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.configMapName must not be empty" }}
+{{- end }}
+{{- if not (regexMatch $dnsSubdomainPattern $clusterDNSConfigMapName) }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.configMapName must be a valid Kubernetes resource name" }}
+{{- end }}
+{{- if and $clusterDNSRolloutDeployment (not (regexMatch $dnsSubdomainPattern $clusterDNSRolloutDeployment)) }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.rolloutDeployment must be a valid Kubernetes resource name when set" }}
 {{- end }}
 apiVersion: v1
 kind: ServiceAccount
