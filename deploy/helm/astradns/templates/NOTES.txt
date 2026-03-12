@@ -1,0 +1,25 @@
+{{- $profile := include "astradns.agent.topology.profile" . -}}
+AstraDNS {{ .Chart.AppVersion }} deployed in namespace {{ include "astradns.namespace" . }}.
+Topology profile: {{ $profile }}
+
+{{- if eq $profile "central" }}
+
+=== Central Mode ===
+Agent Deployment: {{ .Values.agent.deployment.replicas }} replica(s)
+DNS Service: {{ include "astradns.agent.dnsServiceName" . }} ({{ .Values.agent.dnsService.type }}, port {{ .Values.agent.dnsService.port }})
+CoreDNS forward target: {{ include "astradns.agent.dnsServiceFQDN" . }}:{{ .Values.agent.dnsService.port }}
+{{- if lt (int .Values.agent.deployment.replicas) 2 }}
+
+WARNING: Running central mode with fewer than 2 replicas provides no high availability.
+         Consider setting agent.deployment.replicas >= 2 for production use.
+{{- end }}
+{{- else }}
+
+=== Node-Local Mode ===
+Agent DaemonSet: one pod per eligible node
+Network mode: {{ include "astradns.agent.network.mode" . }}
+{{- end }}
+
+Verify the installation:
+  kubectl get pods -n {{ include "astradns.namespace" . }}
+  kubectl run dns-test --rm -it --restart=Never --image=busybox:1.37 -- nslookup example.com

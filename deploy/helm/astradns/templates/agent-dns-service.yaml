@@ -1,0 +1,31 @@
+{{- $profile := include "astradns.agent.topology.profile" . -}}
+{{- if eq $profile "central" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astradns.agent.dnsServiceName" . }}
+  namespace: {{ include "astradns.namespace" . }}
+  labels:
+    {{- include "astradns.agent.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.agent.dnsService.type }}
+  {{- if .Values.agent.dnsService.sessionAffinity }}
+  sessionAffinity: {{ .Values.agent.dnsService.sessionAffinity }}
+  {{- if eq .Values.agent.dnsService.sessionAffinity "ClientIP" }}
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ .Values.agent.dnsService.sessionAffinityTimeoutSeconds }}
+  {{- end }}
+  {{- end }}
+  selector:
+    {{- include "astradns.agent.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: dns-udp
+      port: {{ .Values.agent.dnsService.port }}
+      targetPort: dns-udp
+      protocol: UDP
+    - name: dns-tcp
+      port: {{ .Values.agent.dnsService.port }}
+      targetPort: dns-tcp
+      protocol: TCP
+{{- end }}

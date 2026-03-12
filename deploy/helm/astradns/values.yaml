@@ -89,6 +89,11 @@ agent:
       tag: ""
   # -- DNS engine type: unbound, coredns, powerdns, or bind
   engineType: unbound
+  topology:
+    # -- Deployment topology: node-local (DaemonSet) or central (Deployment + Service).
+    # -- node-local: one agent per node with link-local or hostPort networking.
+    # -- central: fixed replica count behind a ClusterIP Service.
+    profile: node-local
   network:
     # -- Data-path mode for agent DNS listener: hostPort or linkLocal
     mode: hostPort
@@ -155,15 +160,38 @@ agent:
   # -- Priority class for agent pods. Uses built-in Kubernetes critical class by default.
   priorityClassName: system-cluster-critical
   pdb:
-    # -- Create PodDisruptionBudget for agent DaemonSet.
+    # -- Create PodDisruptionBudget for agent pods.
     enabled: true
-    # -- Maximum unavailable agent pods during voluntary disruptions.
+    # -- Maximum unavailable agent pods during voluntary disruptions (node-local mode).
+    # -- In central mode, minAvailable: 1 is used instead.
     maxUnavailable: 10%
   serviceAccount:
     # -- Annotations for the agent service account
     annotations: {}
     # -- Mount service account token in agent pods. Disable when API access is not needed.
     automountServiceAccountToken: false
+  # -- Central-mode Deployment settings (ignored when profile=node-local).
+  deployment:
+    # -- Number of agent replicas in central mode.
+    replicas: 3
+    # -- Deployment strategy for central mode.
+    strategy:
+      type: RollingUpdate
+    # -- Topology spread constraints for central mode. labelSelector is auto-injected.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+  # -- DNS Service settings for central mode (ignored when profile=node-local).
+  dnsService:
+    # -- Service type.
+    type: ClusterIP
+    # -- DNS port exposed by the Service.
+    port: 53
+    # -- Session affinity to keep DNS cache warm per client IP.
+    sessionAffinity: ClientIP
+    # -- Session affinity timeout in seconds.
+    sessionAffinityTimeoutSeconds: 1800
 
 crds:
   # -- Install CRDs with the chart

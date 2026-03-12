@@ -1,13 +1,18 @@
 {{- $profile := include "astradns.agent.topology.profile" . -}}
-{{- if eq $profile "node-local" }}
+{{- if eq $profile "central" }}
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: {{ include "astradns.fullname" . }}-agent
   namespace: {{ include "astradns.namespace" . }}
   labels:
     {{- include "astradns.agent.labels" . | nindent 4 }}
 spec:
+  replicas: {{ .Values.agent.deployment.replicas }}
+  {{- with .Values.agent.deployment.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "astradns.agent.selectorLabels" . | nindent 6 }}
@@ -23,10 +28,5 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- $networkMode := include "astradns.agent.network.mode" . }}
-      {{- if eq $networkMode "linkLocal" }}
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
-      {{- end }}
       {{- include "astradns.agent.podSpec" . | nindent 6 }}
 {{- end }}

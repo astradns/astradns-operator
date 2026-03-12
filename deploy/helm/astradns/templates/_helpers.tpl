@@ -141,3 +141,219 @@ ConfigMap name for agent configuration
 {{- define "astradns.agent.configmap" -}}
 {{- printf "%s-agent-config" (include "astradns.fullname" .) }}
 {{- end }}
+
+{{/*
+Agent topology profile with validation and guardrails.
+Returns "node-local" or "central".
+*/}}
+{{- define "astradns.agent.topology.profile" -}}
+{{- $profile := "node-local" -}}
+{{- with .Values.agent.topology -}}
+{{- $profile = default "node-local" .profile -}}
+{{- end -}}
+{{- if not (has $profile (list "node-local" "central")) -}}
+{{- fail "agent.topology.profile must be one of: node-local, central" -}}
+{{- end -}}
+{{- if and (eq $profile "central") (eq (include "astradns.agent.network.mode" $) "linkLocal") -}}
+{{- fail "agent.topology.profile=central is incompatible with agent.network.mode=linkLocal — central mode uses a ClusterIP Service, not link-local addressing" -}}
+{{- end -}}
+{{- $profile -}}
+{{- end }}
+
+{{/*
+DNS Service name for central mode
+*/}}
+{{- define "astradns.agent.dnsServiceName" -}}
+{{- printf "%s-agent-dns" (include "astradns.fullname" .) -}}
+{{- end }}
+
+{{/*
+DNS Service FQDN for central mode CoreDNS forwarding
+*/}}
+{{- define "astradns.agent.dnsServiceFQDN" -}}
+{{- printf "%s.%s.svc.cluster.local" (include "astradns.agent.dnsServiceName" .) (include "astradns.namespace" .) -}}
+{{- end }}
+
+{{/*
+CoreDNS forward target — auto-computed based on topology profile.
+Central mode uses the DNS Service FQDN; node-local uses the configured target.
+*/}}
+{{- define "astradns.agent.corednsForwardTarget" -}}
+{{- $profile := include "astradns.agent.topology.profile" . -}}
+{{- if eq $profile "central" -}}
+{{- printf "%s:%s" (include "astradns.agent.dnsServiceFQDN" .) (toString (default 53 .Values.agent.dnsService.port)) -}}
+{{- else -}}
+{{- .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Agent pod spec — shared between DaemonSet (node-local) and Deployment (central).
+Outputs the full pod spec starting at indentation level 0.
+Caller must render hostNetwork/dnsPolicy before including this template,
+then apply nindent to position within the workload resource.
+*/}}
+{{- define "astradns.agent.podSpec" -}}
+{{- $profile := include "astradns.agent.topology.profile" . -}}
+{{- $networkMode := include "astradns.agent.network.mode" . }}
+serviceAccountName: {{ include "astradns.fullname" . }}-agent
+automountServiceAccountToken: {{ .Values.agent.serviceAccount.automountServiceAccountToken }}
+{{- if .Values.agent.priorityClassName }}
+priorityClassName: {{ .Values.agent.priorityClassName | quote }}
+{{- end }}
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containers:
+  - name: agent
+    image: {{ include "astradns.agent.image" . }}
+    imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+    env:
+      - name: ASTRADNS_ENGINE_TYPE
+        value: {{ .Values.agent.engineType | quote }}
+      - name: ASTRADNS_CONFIG_PATH
+        value: /etc/astradns/config
+      - name: ASTRADNS_LISTEN_ADDR
+        value: {{ include "astradns.agent.listenAddr" . | quote }}
+      - name: ASTRADNS_ENGINE_ADDR
+        value: "127.0.0.1:5354"
+      - name: ASTRADNS_METRICS_ADDR
+        value: ":9153"
+      - name: ASTRADNS_HEALTH_ADDR
+        value: ":8080"
+      - name: ASTRADNS_LOG_MODE
+        value: {{ .Values.agent.logMode | quote }}
+      - name: ASTRADNS_LOG_SAMPLE_RATE
+        value: {{ .Values.agent.logSampleRate | quote }}
+      - name: ASTRADNS_PROXY_TIMEOUT
+        value: {{ .Values.agent.proxyTimeout | quote }}
+      - name: ASTRADNS_PROXY_CACHE_MAX_ENTRIES
+        value: {{ .Values.agent.proxyCacheMaxEntries | quote }}
+      - name: ASTRADNS_PROXY_CACHE_DEFAULT_TTL
+        value: {{ .Values.agent.proxyCacheDefaultTTL | quote }}
+      - name: ASTRADNS_ENGINE_CONN_POOL_SIZE
+        value: {{ .Values.agent.engineConnectionPoolSize | quote }}
+      - name: ASTRADNS_CONFIG_WATCH_DEBOUNCE
+        value: {{ .Values.agent.configWatchDebounce | quote }}
+      - name: ASTRADNS_ENGINE_RECOVERY_INTERVAL
+        value: {{ .Values.agent.engineRecoveryInterval | quote }}
+      - name: ASTRADNS_COMPONENT_ERROR_BUFFER
+        value: {{ .Values.agent.componentErrorBuffer | quote }}
+      - name: ASTRADNS_DIAGNOSTICS_ENABLED
+        value: {{ .Values.agent.diagnostics.enabled | quote }}
+      - name: ASTRADNS_DIAGNOSTICS_TARGETS
+        value: {{ .Values.agent.diagnostics.targets | quote }}
+      - name: ASTRADNS_DIAGNOSTICS_INTERVAL
+        value: {{ .Values.agent.diagnostics.interval | quote }}
+      - name: ASTRADNS_DIAGNOSTICS_TIMEOUT
+        value: {{ .Values.agent.diagnostics.timeout | quote }}
+      - name: ASTRADNS_TRACING_ENABLED
+        value: {{ .Values.agent.tracing.enabled | quote }}
+      - name: ASTRADNS_TRACING_ENDPOINT
+        value: {{ .Values.agent.tracing.endpoint | quote }}
+      - name: ASTRADNS_TRACING_INSECURE
+        value: {{ .Values.agent.tracing.insecure | quote }}
+      - name: ASTRADNS_TRACING_SAMPLE_RATIO
+        value: {{ .Values.agent.tracing.sampleRatio | quote }}
+      - name: ASTRADNS_TRACING_SERVICE_NAME
+        value: {{ .Values.agent.tracing.serviceName | quote }}
+      {{- if .Values.agent.metrics.bearerToken }}
+      - name: ASTRADNS_METRICS_BEARER_TOKEN
+        value: {{ .Values.agent.metrics.bearerToken | quote }}
+      {{- end }}
+    ports:
+      {{- if and (eq $profile "node-local") (eq $networkMode "hostPort") }}
+      - name: dns-udp
+        containerPort: 5353
+        hostPort: 5353
+        protocol: UDP
+      - name: dns-tcp
+        containerPort: 5353
+        hostPort: 5353
+        protocol: TCP
+      {{- else }}
+      - name: dns-udp
+        containerPort: 5353
+        protocol: UDP
+      - name: dns-tcp
+        containerPort: 5353
+        protocol: TCP
+      {{- end }}
+      - name: metrics
+        containerPort: 9153
+        protocol: TCP
+      - name: health
+        containerPort: 8080
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: health
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: health
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      {{- toYaml .Values.agent.resources | nindent 6 }}
+    volumeMounts:
+      - name: config
+        mountPath: /etc/astradns/config
+        readOnly: true
+      - name: engine-runtime
+        mountPath: /var/run/astradns/engine
+      - name: tmp
+        mountPath: /tmp
+terminationGracePeriodSeconds: 30
+volumes:
+  - name: config
+    configMap:
+      name: {{ include "astradns.agent.configmap" . }}
+  - name: engine-runtime
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+{{- with .Values.agent.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.agent.affinity }}
+affinity:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.agent.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- if eq $profile "central" }}
+{{- with .Values.agent.deployment.topologySpreadConstraints }}
+topologySpreadConstraints:
+  {{- range . }}
+  - maxSkew: {{ .maxSkew }}
+    topologyKey: {{ .topologyKey }}
+    whenUnsatisfiable: {{ .whenUnsatisfiable }}
+    labelSelector:
+      matchLabels:
+        {{- include "astradns.agent.selectorLabels" $ | nindent 8 }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,13 +1,14 @@
 {{- if .Values.clusterDNS.forwardExternalToAstraDNS.enabled }}
-{{- if ne (include "astradns.agent.network.mode" .) "linkLocal" }}
-{{- fail "clusterDNS.forwardExternalToAstraDNS.enabled requires agent.network.mode=linkLocal" }}
+{{- $profile := include "astradns.agent.topology.profile" . }}
+{{- if and (eq $profile "node-local") (ne (include "astradns.agent.network.mode" .) "linkLocal") }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS with profile=node-local requires agent.network.mode=linkLocal" }}
 {{- end }}
 {{- if ne (lower .Values.clusterDNS.provider) "coredns" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS currently supports only clusterDNS.provider=coredns" }}
 {{- end }}
 {{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
 {{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
-{{- $clusterDNSForwardTarget := trim .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}
+{{- $clusterDNSForwardTarget := include "astradns.agent.corednsForwardTarget" . | trim }}
 {{- $clusterDNSFallbackUpstream := trim (default "" .Values.clusterDNS.forwardExternalToAstraDNS.fallbackUpstream) }}
 {{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
 {{- $clusterDNSKubectlImage := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage }}
