@@ -11,8 +11,8 @@ imagePullSecrets: []
 
 operator:
   image:
-    repository: astradns/operator
-    tag: ""  # Defaults to appVersion
+    repository: ghcr.io/astradns/astradns-operator
+    tag: ""  # Defaults to v<appVersion>
     pullPolicy: IfNotPresent
   replicas: 1
   # -- Enable leader election for HA operator deployments
@@ -69,8 +69,8 @@ operator:
 
 agent:
   image:
-    repository: astradns/agent
-    tag: ""  # Defaults to appVersion
+    repository: ghcr.io/astradns/astradns-agent
+    tag: ""  # Defaults to v<appVersion>
     pullPolicy: IfNotPresent
   # -- Optional engine-specific image overrides keyed by engine type.
   # -- When repository is empty for the selected engine, chart falls back to agent.image.

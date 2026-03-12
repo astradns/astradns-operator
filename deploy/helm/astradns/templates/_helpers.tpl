@@ -81,10 +81,17 @@ Namespace helper
 {{- end }}
 
 {{/*
+Default image tag derived from chart appVersion.
+*/}}
+{{- define "astradns.defaultImageTag" -}}
+{{- printf "v%s" .Chart.AppVersion -}}
+{{- end }}
+
+{{/*
 Operator image
 */}}
 {{- define "astradns.operator.image" -}}
-{{- $tag := default .Chart.AppVersion .Values.operator.image.tag }}
+{{- $tag := default (include "astradns.defaultImageTag" .) .Values.operator.image.tag }}
 {{- printf "%s:%s" .Values.operator.image.repository $tag }}
 {{- end }}
 
@@ -94,7 +101,7 @@ Agent image
 {{- define "astradns.agent.image" -}}
 {{- $engine := default "unbound" .Values.agent.engineType -}}
 {{- $repository := .Values.agent.image.repository -}}
-{{- $tag := default .Chart.AppVersion .Values.agent.image.tag -}}
+{{- $tag := default (include "astradns.defaultImageTag" .) .Values.agent.image.tag -}}
 {{- $engineImages := default (dict) .Values.agent.engineImages -}}
 {{- if hasKey $engineImages $engine -}}
 {{- $engineCfg := index $engineImages $engine -}}
