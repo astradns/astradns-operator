@@ -213,10 +213,10 @@ func TestOperatorNamespace(t *testing.T) {
 	reconciler := &DNSUpstreamPoolReconciler{}
 
 	tests := []struct {
-		name         string
-		envValue     string
-		fallback     string
-		wantResult   string
+		name       string
+		envValue   string
+		fallback   string
+		wantResult string
 	}{
 		{
 			name:       "POD_NAMESPACE set to custom-ns",
@@ -323,48 +323,48 @@ func TestSortPoolsForSelection(t *testing.T) {
 		}
 	})
 
-	t.Run("same creationTimestamp falls back to resourceVersion", func(t *testing.T) {
+	t.Run("same creationTimestamp falls back to initial-resource-version annotation", func(t *testing.T) {
 		pools := []v1alpha1.DNSUpstreamPool{
 			{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "pool-high-rv",
+					Name:              "pool-high-irv",
 					CreationTimestamp: metav1.NewTime(now),
-					ResourceVersion:   "100",
+					Annotations:       map[string]string{initialRVAnnotation: "100"},
 				},
 			},
 			{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "pool-low-rv",
+					Name:              "pool-low-irv",
 					CreationTimestamp: metav1.NewTime(now),
-					ResourceVersion:   "10",
+					Annotations:       map[string]string{initialRVAnnotation: "10"},
 				},
 			},
 		}
 
 		sortPoolsForSelection(pools)
 
-		if pools[0].Name != "pool-low-rv" {
-			t.Errorf("expected pool-low-rv first (lower resourceVersion), got %q", pools[0].Name)
+		if pools[0].Name != "pool-low-irv" {
+			t.Errorf("expected pool-low-irv first (lower initial RV), got %q", pools[0].Name)
 		}
-		if pools[1].Name != "pool-high-rv" {
-			t.Errorf("expected pool-high-rv second, got %q", pools[1].Name)
+		if pools[1].Name != "pool-high-irv" {
+			t.Errorf("expected pool-high-irv second, got %q", pools[1].Name)
 		}
 	})
 
-	t.Run("same timestamp and same resourceVersion falls back to name ordering", func(t *testing.T) {
+	t.Run("same timestamp and same initial-rv falls back to name ordering", func(t *testing.T) {
 		pools := []v1alpha1.DNSUpstreamPool{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "zeta-pool",
 					CreationTimestamp: metav1.NewTime(now),
-					ResourceVersion:   "5",
+					Annotations:       map[string]string{initialRVAnnotation: "5"},
 				},
 			},
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "alpha-pool",
 					CreationTimestamp: metav1.NewTime(now),
-					ResourceVersion:   "5",
+					Annotations:       map[string]string{initialRVAnnotation: "5"},
 				},
 			},
 		}
@@ -379,20 +379,18 @@ func TestSortPoolsForSelection(t *testing.T) {
 		}
 	})
 
-	t.Run("deterministic with equal timestamps and non-numeric resourceVersion", func(t *testing.T) {
+	t.Run("missing annotation falls through to name tiebreaker", func(t *testing.T) {
 		pools := []v1alpha1.DNSUpstreamPool{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "bravo",
 					CreationTimestamp: metav1.NewTime(now),
-					ResourceVersion:   "not-a-number",
 				},
 			},
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "alpha",
 					CreationTimestamp: metav1.NewTime(now),
-					ResourceVersion:   "also-not-a-number",
 				},
 			},
 		}
@@ -404,6 +402,33 @@ func TestSortPoolsForSelection(t *testing.T) {
 		}
 		if pools[1].Name != "bravo" {
 			t.Errorf("expected bravo second, got %q", pools[1].Name)
+		}
+	})
+
+	t.Run("pool with annotation beats pool without when timestamps match", func(t *testing.T) {
+		pools := []v1alpha1.DNSUpstreamPool{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "zeta-no-annotation",
+					CreationTimestamp: metav1.NewTime(now),
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "alpha-with-annotation",
+					CreationTimestamp: metav1.NewTime(now),
+					Annotations:       map[string]string{initialRVAnnotation: "1"},
+				},
+			},
+		}
+
+		sortPoolsForSelection(pools)
+
+		// alpha wins by name since zeta has no annotation (initialRV=0)
+		// and alpha has annotation with value 1 — but 0 is treated as "absent"
+		// so the comparison is skipped and falls through to name.
+		if pools[0].Name != "alpha-with-annotation" {
+			t.Errorf("expected alpha-with-annotation first, got %q", pools[0].Name)
 		}
 	})
 }

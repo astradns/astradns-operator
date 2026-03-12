@@ -37,6 +37,13 @@ const (
 	supersededPoolReason    = "Superseded"
 
 	upstreamPoolReadyCondition = "Ready"
+
+	// initialRVAnnotation stores the ResourceVersion observed when the controller
+	// first reconciles a pool. Unlike the live ResourceVersion (which changes on
+	// every update), this value is monotonically ordered in etcd and reflects true
+	// creation order — even when two pools share the same second-precision
+	// creationTimestamp.
+	initialRVAnnotation = "dns.astradns.com/initial-resource-version"
 )
 
 // DNSUpstreamPoolReconciler reconciles DNSUpstreamPool objects.
@@ -71,6 +78,12 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("get DNSUpstreamPool %s: %w", req.NamespacedName, err)
+	}
+
+	// Stamp the initial ResourceVersion so that pool selection can use a stable,
+	// creation-ordered tiebreaker instead of the live (mutable) ResourceVersion.
+	if err := r.ensureInitialRVAnnotation(ctx, &pool); err != nil {
+		return ctrl.Result{}, fmt.Errorf("stamp initial resource version: %w", err)
 	}
 
 	if err := validateDNSUpstreamPool(&pool); err != nil {
@@ -320,6 +333,7 @@ func (r *DNSUpstreamPoolReconciler) selectActivePoolName(ctx context.Context, na
 
 func sortPoolsForSelection(items []v1alpha1.DNSUpstreamPool) {
 	sort.Slice(items, func(i, j int) bool {
+		// 1. Oldest creationTimestamp wins.
 		left := items[i].CreationTimestamp.Time
 		right := items[j].CreationTimestamp.Time
 
@@ -327,14 +341,53 @@ func sortPoolsForSelection(items []v1alpha1.DNSUpstreamPool) {
 			return left.Before(right)
 		}
 
-		leftRV, leftErr := strconv.ParseInt(items[i].ResourceVersion, 10, 64)
-		rightRV, rightErr := strconv.ParseInt(items[j].ResourceVersion, 10, 64)
-		if leftErr == nil && rightErr == nil && leftRV != rightRV {
-			return leftRV < rightRV
+		// 2. Stable initial ResourceVersion (stamped once at first reconcile).
+		//    Unlike the live RV, this never changes after creation so it
+		//    reflects true etcd insertion order.
+		leftIRV := initialRV(items[i])
+		rightIRV := initialRV(items[j])
+		if leftIRV > 0 && rightIRV > 0 && leftIRV != rightIRV {
+			return leftIRV < rightIRV
 		}
 
+		// 3. Alphabetical name as ultimate deterministic tiebreaker.
 		return items[i].Name < items[j].Name
 	})
+}
+
+// initialRV returns the stamped initial ResourceVersion or 0 if absent/unparseable.
+func initialRV(pool v1alpha1.DNSUpstreamPool) int64 {
+	if pool.Annotations == nil {
+		return 0
+	}
+	v, err := strconv.ParseInt(pool.Annotations[initialRVAnnotation], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// ensureInitialRVAnnotation stamps the pool with its ResourceVersion at first
+// reconcile so that sortPoolsForSelection can use a stable, creation-ordered
+// tiebreaker. The annotation is written once and never updated.
+func (r *DNSUpstreamPoolReconciler) ensureInitialRVAnnotation(ctx context.Context, pool *v1alpha1.DNSUpstreamPool) error {
+	if pool.Annotations != nil {
+		if _, ok := pool.Annotations[initialRVAnnotation]; ok {
+			return nil // already stamped
+		}
+	}
+
+	base := pool.DeepCopy()
+	if pool.Annotations == nil {
+		pool.Annotations = map[string]string{}
+	}
+	pool.Annotations[initialRVAnnotation] = pool.ResourceVersion
+
+	if err := r.Patch(ctx, pool, client.MergeFrom(base)); err != nil {
+		return fmt.Errorf("patch initial-resource-version annotation: %w", err)
+	}
+
+	return nil
 }
 
 func (r *DNSUpstreamPoolReconciler) upsertConfigMap(ctx context.Context, namespace, renderedConfig string) error {
