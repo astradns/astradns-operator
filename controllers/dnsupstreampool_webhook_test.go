@@ -75,7 +75,7 @@ func TestDNSUpstreamPoolUniquenessWebhookRejectsSecondPool(t *testing.T) {
 
 // --- Gap 13: Webhook edge cases ---
 
-func TestDNSUpstreamPoolUniquenessWebhookAllowsUpdateOperation(t *testing.T) {
+func TestDNSUpstreamPoolUniquenessWebhookAllowsNonCreateOperations(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme() error = %v", err)
@@ -100,42 +100,17 @@ func TestDNSUpstreamPoolUniquenessWebhookAllowsUpdateOperation(t *testing.T) {
 		},
 	}
 
-	req := newAdmissionRequest(t, pool, admissionv1.Update)
-	response := webhook.Handle(context.Background(), req)
-	if !response.Allowed {
-		t.Fatalf("expected Update operation to be allowed, got denied: %s", response.Result.Message)
-	}
-}
-
-func TestDNSUpstreamPoolUniquenessWebhookAllowsDeleteOperation(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme() error = %v", err)
-	}
-
-	existing := &v1alpha1.DNSUpstreamPool{
-		TypeMeta: metav1.TypeMeta{APIVersion: "dns.astradns.com/v1alpha1", Kind: "DNSUpstreamPool"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool-a",
-			Namespace: "test-ns",
-		},
-	}
-
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	webhook := &DNSUpstreamPoolUniquenessWebhook{Client: client}
-
-	pool := &v1alpha1.DNSUpstreamPool{
-		TypeMeta: metav1.TypeMeta{APIVersion: "dns.astradns.com/v1alpha1", Kind: "DNSUpstreamPool"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool-a",
-			Namespace: "test-ns",
-		},
-	}
-
-	req := newAdmissionRequest(t, pool, admissionv1.Delete)
-	response := webhook.Handle(context.Background(), req)
-	if !response.Allowed {
-		t.Fatalf("expected Delete operation to be allowed, got denied: %s", response.Result.Message)
+	operations := []admissionv1.Operation{admissionv1.Update, admissionv1.Delete}
+	for _, operation := range operations {
+		req := newAdmissionRequest(t, pool, operation)
+		response := webhook.Handle(context.Background(), req)
+		if !response.Allowed {
+			t.Fatalf(
+				"expected %s operation to be allowed, got denied: %s",
+				operation,
+				response.Result.Message,
+			)
+		}
 	}
 }
 
@@ -219,7 +194,10 @@ func TestDNSUpstreamPoolUniquenessWebhookFallsBackToRequestNamespace(t *testing.
 
 	response := webhook.Handle(context.Background(), req)
 	if !response.Allowed {
-		t.Fatalf("expected request to be allowed (first pool in namespace via request fallback), got denied: %s", response.Result.Message)
+		t.Fatalf(
+			"expected request to be allowed (first pool in namespace via request fallback), got denied: %s",
+			response.Result.Message,
+		)
 	}
 }
 
@@ -255,7 +233,11 @@ func newCreateRequest(t *testing.T, pool *v1alpha1.DNSUpstreamPool) admission.Re
 	return newAdmissionRequest(t, pool, admissionv1.Create)
 }
 
-func newAdmissionRequest(t *testing.T, pool *v1alpha1.DNSUpstreamPool, operation admissionv1.Operation) admission.Request {
+func newAdmissionRequest(
+	t *testing.T,
+	pool *v1alpha1.DNSUpstreamPool,
+	operation admissionv1.Operation,
+) admission.Request {
 	t.Helper()
 
 	raw, err := json.Marshal(pool)
