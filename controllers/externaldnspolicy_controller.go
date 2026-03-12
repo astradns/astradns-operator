@@ -99,7 +99,7 @@ func (r *ExternalDNSPolicyReconciler) mapUpstreamPoolToPolicies(
 	requests := make([]reconcile.Request, 0)
 	for i := range policies.Items {
 		policy := policies.Items[i]
-		if policy.Spec.UpstreamPoolRef.Name != obj.GetName() {
+		if strings.TrimSpace(policy.Spec.UpstreamPoolRef.Name) != obj.GetName() {
 			continue
 		}
 		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -123,7 +123,7 @@ func (r *ExternalDNSPolicyReconciler) mapCacheProfileToPolicies(
 	requests := make([]reconcile.Request, 0)
 	for i := range policies.Items {
 		policy := policies.Items[i]
-		if policy.Spec.CacheProfileRef.Name != obj.GetName() {
+		if strings.TrimSpace(policy.Spec.CacheProfileRef.Name) != obj.GetName() {
 			continue
 		}
 		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -156,9 +156,9 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 		}
 	}
 
-	upstreamPoolName := strings.TrimSpace(policy.Spec.UpstreamPoolRef.Name)
-	if upstreamPoolName == "" {
-		return errors.New("spec.upstreamPoolRef.name is required")
+	upstreamPoolName, err := validatePolicyRefName(policy.Spec.UpstreamPoolRef.Name, "spec.upstreamPoolRef.name", true)
+	if err != nil {
+		return err
 	}
 
 	if err := r.Get(
@@ -172,10 +172,9 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 		return fmt.Errorf("get referenced upstream pool %q: %w", upstreamPoolName, err)
 	}
 
-	cacheProfileRaw := policy.Spec.CacheProfileRef.Name
-	cacheProfileName := strings.TrimSpace(cacheProfileRaw)
-	if cacheProfileRaw != "" && cacheProfileName == "" {
-		return errors.New("spec.cacheProfileRef.name must not be whitespace")
+	cacheProfileName, err := validatePolicyRefName(policy.Spec.CacheProfileRef.Name, "spec.cacheProfileRef.name", false)
+	if err != nil {
+		return err
 	}
 	if cacheProfileName == "" {
 		return nil
@@ -193,6 +192,30 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 	}
 
 	return nil
+}
+
+func validatePolicyRefName(raw, fieldPath string, required bool) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+
+	if trimmed == "" {
+		if required {
+			return "", fmt.Errorf("%s is required", fieldPath)
+		}
+		if raw != "" {
+			return "", fmt.Errorf("%s must not be whitespace", fieldPath)
+		}
+		return "", nil
+	}
+
+	if raw != trimmed {
+		return "", fmt.Errorf("%s must not include leading or trailing whitespace", fieldPath)
+	}
+
+	if errs := validation.IsDNS1123Label(trimmed); len(errs) > 0 {
+		return "", fmt.Errorf("%s %q is not a valid resource name", fieldPath, raw)
+	}
+
+	return trimmed, nil
 }
 
 func (r *ExternalDNSPolicyReconciler) setValidatedCondition(

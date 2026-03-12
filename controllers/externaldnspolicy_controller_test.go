@@ -19,7 +19,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		Expect(k8sClient.Create(context.Background(), profile)).To(Succeed())
 	}
 
-	createPolicyWithPool := func(namespace, poolName, policyName, cacheProfileRef string) {
+	createPolicyWithPool := func(namespace, poolName, policyName, upstreamPoolRef, cacheProfileRef string) {
 		pool := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
 			Spec: v1alpha1.DNSUpstreamPoolSpec{
@@ -32,7 +32,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: namespace},
 			Spec: v1alpha1.ExternalDNSPolicySpec{
 				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
-				UpstreamPoolRef: v1alpha1.ResourceRef{Name: poolName},
+				UpstreamPoolRef: v1alpha1.ResourceRef{Name: upstreamPoolRef},
 				CacheProfileRef: v1alpha1.ResourceRef{Name: cacheProfileRef},
 			},
 		}
@@ -150,7 +150,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		poolName := "pool-cache-missing"
 		policyName := "policy-cache-missing"
 
-		createPolicyWithPool(namespace, poolName, policyName, "nonexistent-profile")
+		createPolicyWithPool(namespace, poolName, policyName, poolName, "nonexistent-profile")
 
 		Eventually(func(g Gomega) {
 			current := &v1alpha1.ExternalDNSPolicy{}
@@ -168,7 +168,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		poolName := "pool-cache-whitespace"
 		policyName := "policy-cache-whitespace"
 
-		createPolicyWithPool(namespace, poolName, policyName, "   ")
+		createPolicyWithPool(namespace, poolName, policyName, poolName, "   ")
 
 		Eventually(func(g Gomega) {
 			current := &v1alpha1.ExternalDNSPolicy{}
@@ -178,6 +178,46 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			g.Expect(condition).NotTo(BeNil())
 			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			g.Expect(condition.Message).To(ContainSubstring("spec.cacheProfileRef.name must not be whitespace"))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("sets Validated=False when upstreamPoolRef has leading or trailing whitespace", func() {
+		namespace := createNamespace("policy-upstream-ref-padding")
+		poolName := "pool-upstream-padding"
+		policyName := "policy-upstream-padding"
+		expectedMsg := "spec.upstreamPoolRef.name must not include leading or trailing whitespace"
+		createDefaultProfile(namespace)
+
+		createPolicyWithPool(namespace, poolName, policyName, poolName+" ", "default")
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: policyName, Namespace: namespace}, current)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(condition.Message).To(ContainSubstring(expectedMsg))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("sets Validated=False when cacheProfileRef has leading or trailing whitespace", func() {
+		namespace := createNamespace("policy-cache-ref-padding")
+		poolName := "pool-cache-padding"
+		policyName := "policy-cache-padding"
+		expectedMsg := "spec.cacheProfileRef.name must not include leading or trailing whitespace"
+		createDefaultProfile(namespace)
+
+		createPolicyWithPool(namespace, poolName, policyName, poolName, "default ")
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: policyName, Namespace: namespace}, current)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(condition.Message).To(ContainSubstring(expectedMsg))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
