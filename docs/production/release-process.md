@@ -31,7 +31,7 @@ Tagged releases publish the chart as OCI to GHCR:
 Example install:
 
 ```sh
-helm install astradns oci://ghcr.io/astradns/helm-charts/astradns --version 0.2.0 -n astradns-system --create-namespace
+helm install astradns oci://ghcr.io/astradns/helm-charts/astradns --version <chart-version> -n astradns-system --create-namespace
 ```
 
 ## Upgrade strategy (Canary and Blue/Green)
