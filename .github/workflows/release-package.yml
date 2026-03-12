@@ -41,9 +41,11 @@ jobs:
           fi
 
       - name: Verify release metadata
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: make release-check
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            export RELEASE_TAG="${GITHUB_REF_NAME}"
+          fi
+          make release-check
 
       - name: Run release gate tests
         run: |
@@ -62,26 +64,8 @@ jobs:
           syft dir:. -o cyclonedx-json=dist/astradns-operator-${{ github.ref_name }}-sbom.cdx.json
           syft dir:deploy/helm/astradns -o cyclonedx-json=dist/astradns-chart-${{ github.ref_name }}-sbom.cdx.json
 
-      - name: Login to GHCR for Helm chart publish
+      - name: Generate Artifact Hub metadata file
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "${GH_TOKEN}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
-
-      - name: Publish Helm chart to GHCR OCI
-        run: |
-          chart_archive=$(ls dist/astradns-*.tgz)
-          helm push "${chart_archive}" oci://ghcr.io/${{ github.repository_owner }}/helm-charts
-          echo "oci://ghcr.io/${{ github.repository_owner }}/helm-charts/astradns:${{ github.ref_name }}" > dist/helm-chart-reference.txt
-
-      - name: Install ORAS
-        run: |
-          GOBIN="${HOME}/go/bin" go install oras.land/oras/cmd/oras@v1.2.3
-          echo "${HOME}/go/bin" >> "$GITHUB_PATH"
-
-      - name: Publish Artifact Hub repository metadata
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACTHUB_REPOSITORY_ID: ${{ vars.ARTIFACTHUB_REPOSITORY_ID }}
         run: |
           if [ -z "${ARTIFACTHUB_REPOSITORY_ID}" ]; then
@@ -93,6 +77,36 @@ jobs:
           repositoryID: ${ARTIFACTHUB_REPOSITORY_ID}
           EOF
 
+      - name: Login to GHCR for Helm chart publish
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${GH_TOKEN}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Publish Helm chart to GHCR OCI
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          chart_archive=$(ls dist/astradns-*.tgz)
+          helm push "${chart_archive}" oci://ghcr.io/${{ github.repository_owner }}/helm-charts
+          echo "oci://ghcr.io/${{ github.repository_owner }}/helm-charts/astradns:${{ github.ref_name }}" > dist/helm-chart-reference.txt
+
+      - name: Write dry-run chart reference
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          echo "dry-run: chart publication is only executed on SemVer tags" > dist/helm-chart-reference.txt
+
+      - name: Install ORAS
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          GOBIN="${HOME}/go/bin" go install oras.land/oras/cmd/oras@v1.2.3
+          echo "${HOME}/go/bin" >> "$GITHUB_PATH"
+
+      - name: Publish Artifact Hub repository metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           echo "${GH_TOKEN}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
 
           oras push \
