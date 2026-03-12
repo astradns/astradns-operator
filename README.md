@@ -73,6 +73,8 @@ helm upgrade --install astradns deploy/helm/astradns \
 
 With `clusterDNS.forwardExternalToAstraDNS.enabled=true`, Helm runs a post-install/post-upgrade job that patches the CoreDNS ConfigMap forward target to the AstraDNS link-local listener (`169.254.20.11:5353` by default).
 
+`clusterDNS.provider` is currently validated to `coredns` when this integration is enabled.
+
 To avoid misconfiguration, cluster DNS integration requires `agent.network.mode=linkLocal`.
 
 The integration toggle remains explicit because some clusters patch CoreDNS out-of-band (GitOps/platform controllers), and Helm should not overwrite cluster DNS unless requested.

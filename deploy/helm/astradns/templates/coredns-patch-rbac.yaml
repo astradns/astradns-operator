@@ -2,6 +2,9 @@
 {{- if ne (include "astradns.agent.network.mode" .) "linkLocal" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.enabled requires agent.network.mode=linkLocal" }}
 {{- end }}
+{{- if ne (lower .Values.clusterDNS.provider) "coredns" }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS currently supports only clusterDNS.provider=coredns" }}
+{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:

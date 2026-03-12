@@ -143,7 +143,7 @@ webhook:
       group: cert-manager.io
 
 clusterDNS:
-  # -- Cluster DNS provider that forwards external traffic to AstraDNS.
+  # -- Cluster DNS provider that forwards external traffic to AstraDNS. Only coredns is currently supported.
   provider: coredns
   forwardExternalToAstraDNS:
     # -- Patch existing cluster DNS config to forward external DNS to AstraDNS.
