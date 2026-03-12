@@ -29,11 +29,17 @@ jobs:
       - name: Bootstrap sibling repositories
         run: bash ./hack/bootstrap-monorepo.sh
 
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
       - name: Unit tests
         run: make test
 
       - name: Lint
         run: make lint
+
+      - name: Helm lint and release checks
+        run: make release-check
 
   security-gosec:
     runs-on: ubuntu-latest

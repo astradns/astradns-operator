@@ -38,8 +38,19 @@ jobs:
       - name: Package Helm chart
         run: make package-chart
 
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate SBOM artifacts
+        run: |
+          mkdir -p dist
+          syft dir:. -o cyclonedx-json=dist/astradns-operator-${{ github.ref_name }}-sbom.cdx.json
+          syft dir:deploy/helm/astradns -o cyclonedx-json=dist/astradns-chart-${{ github.ref_name }}-sbom.cdx.json
+
       - name: Upload chart artifact
         uses: actions/upload-artifact@v4
         with:
           name: astradns-chart-${{ github.ref_name }}
-          path: dist/*.tgz
+          path: |
+            dist/*.tgz
+            dist/*-sbom.cdx.json
