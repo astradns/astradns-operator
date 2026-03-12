@@ -211,7 +211,7 @@ func validatePolicyRefName(raw, fieldPath string, required bool) (string, error)
 		return "", fmt.Errorf("%s must not include leading or trailing whitespace", fieldPath)
 	}
 
-	if errs := validation.IsDNS1123Label(trimmed); len(errs) > 0 {
+	if errs := validation.IsDNS1123Subdomain(trimmed); len(errs) > 0 {
 		return "", fmt.Errorf("%s %q is not a valid resource name", fieldPath, raw)
 	}
 

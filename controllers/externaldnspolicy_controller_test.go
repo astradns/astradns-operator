@@ -73,6 +73,24 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
+	It("sets Validated=True when upstreamPoolRef uses dotted resource name", func() {
+		namespace := createNamespace("policy-valid-dotted")
+		poolName := "pool.v1"
+		policyName := "policy-dotted"
+		createDefaultProfile(namespace)
+
+		createPolicyWithPool(namespace, poolName, policyName, poolName, "default")
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: policyName, Namespace: namespace}, current)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
 	It("sets Validated=False when upstream pool is missing", func() {
 		namespace := createNamespace("policy-missing")
 		policyName := "policy-missing"
