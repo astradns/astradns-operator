@@ -185,3 +185,214 @@ func TestCoreDNSRendererMetadata(t *testing.T) {
 		t.Fatalf("ConfigFileName() = %q, want %q", renderer.ConfigFileName(), "Corefile")
 	}
 }
+
+// validCoreDNSConfig returns a minimal valid EngineConfig for CoreDNS rendering tests.
+// Callers should override only the fields relevant to their test scenario.
+func validCoreDNSConfig() *engine.EngineConfig {
+	return &engine.EngineConfig{
+		Upstreams: []engine.UpstreamConfig{
+			{Address: "1.1.1.1", Port: 53},
+		},
+		Cache: engine.CacheConfig{
+			MaxEntries:     100000,
+			PositiveTtlMin: 60,
+			PositiveTtlMax: 300,
+			NegativeTtl:    30,
+		},
+		ListenAddr: "127.0.0.1",
+		ListenPort: 5354,
+	}
+}
+
+// --- Gap 9: IPv6 upstream addresses in rendering ---
+
+func TestCoreDNSRendererIPv6Upstreams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		upstreams []engine.UpstreamConfig
+		checks    []string
+	}{
+		{
+			name: "single IPv6 loopback with port 53",
+			upstreams: []engine.UpstreamConfig{
+				{Address: "::1", Port: 53},
+			},
+			checks: []string{
+				"forward . ::1:53",
+			},
+		},
+		{
+			name: "IPv6 upstream with non-standard port 5353",
+			upstreams: []engine.UpstreamConfig{
+				{Address: "2001:db8::1", Port: 5353},
+			},
+			checks: []string{
+				"forward . 2001:db8::1:5353",
+			},
+		},
+		{
+			name: "mixed IPv4 and IPv6 upstreams",
+			upstreams: []engine.UpstreamConfig{
+				{Address: "1.1.1.1", Port: 53},
+				{Address: "2001:db8::1", Port: 5353},
+			},
+			checks: []string{
+				"1.1.1.1:53",
+				"2001:db8::1:5353",
+			},
+		},
+	}
+
+	renderer := &CoreDNSRenderer{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			config := validCoreDNSConfig()
+			config.Upstreams = tt.upstreams
+
+			got, err := renderer.Render(config)
+			if err != nil {
+				t.Fatalf("Render() returned error: %v", err)
+			}
+
+			for _, check := range tt.checks {
+				if !strings.Contains(got, check) {
+					t.Fatalf("Render() output does not contain %q\nfull output:\n%s", check, got)
+				}
+			}
+		})
+	}
+}
+
+// --- Gap 12: Empty upstreams list in rendering ---
+
+func TestCoreDNSRendererEmptyUpstreams(t *testing.T) {
+	t.Parallel()
+
+	renderer := &CoreDNSRenderer{}
+	config := validCoreDNSConfig()
+	config.Upstreams = []engine.UpstreamConfig{}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	// With no upstreams, the forward directive should still render but
+	// without any upstream addresses listed.
+	if !strings.Contains(got, "forward .") {
+		t.Fatalf("Render() output should contain forward directive\nfull output:\n%s", got)
+	}
+}
+
+func TestCoreDNSRendererUpstreamPortZeroNormalization(t *testing.T) {
+	t.Parallel()
+
+	renderer := &CoreDNSRenderer{}
+	config := validCoreDNSConfig()
+	config.Upstreams = []engine.UpstreamConfig{
+		{Address: "9.9.9.9", Port: 0},
+	}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	if !strings.Contains(got, "forward . 9.9.9.9:53") {
+		t.Fatalf("Render() output should normalize port 0 to 53\nfull output:\n%s", got)
+	}
+	if strings.Contains(got, "9.9.9.9:0") {
+		t.Fatalf("Render() output should not contain port 0\nfull output:\n%s", got)
+	}
+}
+
+// --- Gap 14: Zero/negative cache values in rendering ---
+
+func TestCoreDNSRendererZeroCacheValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		cache  engine.CacheConfig
+		checks []string
+	}{
+		{
+			name: "MaxEntries zero",
+			cache: engine.CacheConfig{
+				MaxEntries:     0,
+				PositiveTtlMin: 60,
+				PositiveTtlMax: 300,
+				NegativeTtl:    30,
+			},
+			checks: []string{
+				"success 0 300",
+				"denial 0 30",
+			},
+		},
+		{
+			name: "NegativeTtl zero",
+			cache: engine.CacheConfig{
+				MaxEntries:     100000,
+				PositiveTtlMin: 60,
+				PositiveTtlMax: 300,
+				NegativeTtl:    0,
+			},
+			checks: []string{
+				"denial 100000 0",
+			},
+		},
+		{
+			name: "PositiveTtlMin and PositiveTtlMax both zero",
+			cache: engine.CacheConfig{
+				MaxEntries:     100000,
+				PositiveTtlMin: 0,
+				PositiveTtlMax: 0,
+				NegativeTtl:    30,
+			},
+			checks: []string{
+				"cache 0 {",
+				"success 100000 0",
+			},
+		},
+		{
+			name: "very large MaxEntries",
+			cache: engine.CacheConfig{
+				MaxEntries:     10000000,
+				PositiveTtlMin: 60,
+				PositiveTtlMax: 300,
+				NegativeTtl:    30,
+			},
+			checks: []string{
+				"success 10000000 300",
+				"denial 10000000 30",
+			},
+		},
+	}
+
+	renderer := &CoreDNSRenderer{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			config := validCoreDNSConfig()
+			config.Cache = tt.cache
+
+			got, err := renderer.Render(config)
+			if err != nil {
+				t.Fatalf("Render() returned error: %v", err)
+			}
+
+			for _, check := range tt.checks {
+				if !strings.Contains(got, check) {
+					t.Fatalf("Render() output does not contain %q\nfull output:\n%s", check, got)
+				}
+			}
+		})
+	}
+}

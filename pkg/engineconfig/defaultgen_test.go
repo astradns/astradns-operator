@@ -108,6 +108,120 @@ func TestDefaultConfigGeneratorGenerateNilPool(t *testing.T) {
 	}
 }
 
+// --- Gap 11: Profile with Prefetch.Enabled=false overriding default ---
+
+func TestDefaultConfigGeneratorPrefetchDisabledOverridesDefault(t *testing.T) {
+	t.Parallel()
+
+	gen := &DefaultConfigGenerator{}
+	pool := &v1alpha1.DNSUpstreamPool{
+		Spec: v1alpha1.DNSUpstreamPoolSpec{
+			Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1"}},
+		},
+	}
+	profile := &v1alpha1.DNSCacheProfile{
+		Spec: v1alpha1.DNSCacheProfileSpec{
+			Prefetch: v1alpha1.PrefetchConfig{Enabled: false, Threshold: 0},
+		},
+	}
+
+	got, err := gen.Generate(pool, profile)
+	if err != nil {
+		t.Fatalf("Generate() returned error: %v", err)
+	}
+
+	if got.Cache.PrefetchEnabled {
+		t.Fatal("PrefetchEnabled = true, want false when profile explicitly sets Enabled=false")
+	}
+	// Threshold should remain at default because profile value is 0
+	if got.Cache.PrefetchThreshold != 10 {
+		t.Fatalf("PrefetchThreshold = %d, want %d (default)", got.Cache.PrefetchThreshold, 10)
+	}
+}
+
+func TestDefaultConfigGeneratorOnlyMaxEntriesOverridden(t *testing.T) {
+	t.Parallel()
+
+	gen := &DefaultConfigGenerator{}
+	pool := &v1alpha1.DNSUpstreamPool{
+		Spec: v1alpha1.DNSUpstreamPoolSpec{
+			Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1"}},
+		},
+	}
+	profile := &v1alpha1.DNSCacheProfile{
+		Spec: v1alpha1.DNSCacheProfileSpec{
+			MaxEntries: 5000,
+		},
+	}
+
+	got, err := gen.Generate(pool, profile)
+	if err != nil {
+		t.Fatalf("Generate() returned error: %v", err)
+	}
+
+	if got.Cache.MaxEntries != 5000 {
+		t.Fatalf("MaxEntries = %d, want %d", got.Cache.MaxEntries, 5000)
+	}
+	// All other fields should retain their defaults
+	if got.Cache.PositiveTtlMin != 60 {
+		t.Fatalf("PositiveTtlMin = %d, want %d (default)", got.Cache.PositiveTtlMin, 60)
+	}
+	if got.Cache.PositiveTtlMax != 300 {
+		t.Fatalf("PositiveTtlMax = %d, want %d (default)", got.Cache.PositiveTtlMax, 300)
+	}
+	if got.Cache.NegativeTtl != 30 {
+		t.Fatalf("NegativeTtl = %d, want %d (default)", got.Cache.NegativeTtl, 30)
+	}
+	// Prefetch.Enabled=false in zero-value profile overrides default true
+	if got.Cache.PrefetchEnabled {
+		t.Fatal("PrefetchEnabled = true, want false when profile Prefetch.Enabled is zero-value false")
+	}
+	if got.Cache.PrefetchThreshold != 10 {
+		t.Fatalf("PrefetchThreshold = %d, want %d (default)", got.Cache.PrefetchThreshold, 10)
+	}
+}
+
+func TestDefaultConfigGeneratorAllZeroValueProfile(t *testing.T) {
+	t.Parallel()
+
+	gen := &DefaultConfigGenerator{}
+	pool := &v1alpha1.DNSUpstreamPool{
+		Spec: v1alpha1.DNSUpstreamPoolSpec{
+			Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1"}},
+		},
+	}
+	profile := &v1alpha1.DNSCacheProfile{
+		Spec: v1alpha1.DNSCacheProfileSpec{},
+	}
+
+	got, err := gen.Generate(pool, profile)
+	if err != nil {
+		t.Fatalf("Generate() returned error: %v", err)
+	}
+
+	// All zero-value profile fields should result in defaults being kept,
+	// except PrefetchEnabled which is always directly assigned from profile.
+	if got.Cache.MaxEntries != 100000 {
+		t.Fatalf("MaxEntries = %d, want %d (default)", got.Cache.MaxEntries, 100000)
+	}
+	if got.Cache.PositiveTtlMin != 60 {
+		t.Fatalf("PositiveTtlMin = %d, want %d (default)", got.Cache.PositiveTtlMin, 60)
+	}
+	if got.Cache.PositiveTtlMax != 300 {
+		t.Fatalf("PositiveTtlMax = %d, want %d (default)", got.Cache.PositiveTtlMax, 300)
+	}
+	if got.Cache.NegativeTtl != 30 {
+		t.Fatalf("NegativeTtl = %d, want %d (default)", got.Cache.NegativeTtl, 30)
+	}
+	// PrefetchEnabled is directly assigned: profile zero-value false overrides default true
+	if got.Cache.PrefetchEnabled {
+		t.Fatal("PrefetchEnabled = true, want false when profile has zero-value (false)")
+	}
+	if got.Cache.PrefetchThreshold != 10 {
+		t.Fatalf("PrefetchThreshold = %d, want %d (default)", got.Cache.PrefetchThreshold, 10)
+	}
+}
+
 func TestRendererRegistration(t *testing.T) {
 	t.Parallel()
 

@@ -203,3 +203,254 @@ func TestUnboundRendererMetadata(t *testing.T) {
 		t.Fatalf("ConfigFileName() = %q, want %q", renderer.ConfigFileName(), "unbound.conf")
 	}
 }
+
+// validUnboundConfig returns a minimal valid EngineConfig for Unbound rendering tests.
+// Callers should override only the fields relevant to their test scenario.
+func validUnboundConfig() *engine.EngineConfig {
+	return &engine.EngineConfig{
+		Upstreams: []engine.UpstreamConfig{
+			{Address: "1.1.1.1", Port: 53},
+		},
+		Cache: engine.CacheConfig{
+			MaxEntries:     100000,
+			PositiveTtlMin: 60,
+			PositiveTtlMax: 300,
+			NegativeTtl:    30,
+		},
+		ListenAddr: "127.0.0.1",
+		ListenPort: 5354,
+	}
+}
+
+// --- Gap 9: IPv6 upstream addresses in rendering ---
+
+func TestUnboundRendererIPv6Upstreams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		upstreams []engine.UpstreamConfig
+		checks    []string
+		absent    []string
+	}{
+		{
+			name: "single IPv6 loopback with port 53",
+			upstreams: []engine.UpstreamConfig{
+				{Address: "::1", Port: 53},
+			},
+			checks: []string{
+				"forward-addr: ::1",
+			},
+			absent: []string{
+				"forward-addr: ::1@53",
+			},
+		},
+		{
+			name: "IPv6 upstream with non-standard port 5353",
+			upstreams: []engine.UpstreamConfig{
+				{Address: "2001:db8::1", Port: 5353},
+			},
+			checks: []string{
+				"forward-addr: 2001:db8::1@5353",
+			},
+		},
+		{
+			name: "mixed IPv4 and IPv6 upstreams",
+			upstreams: []engine.UpstreamConfig{
+				{Address: "1.1.1.1", Port: 53},
+				{Address: "2001:db8::1", Port: 5353},
+			},
+			checks: []string{
+				"forward-addr: 1.1.1.1",
+				"forward-addr: 2001:db8::1@5353",
+			},
+			absent: []string{
+				"forward-addr: 1.1.1.1@53",
+			},
+		},
+	}
+
+	renderer := &UnboundRenderer{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			config := validUnboundConfig()
+			config.Upstreams = tt.upstreams
+
+			got, err := renderer.Render(config)
+			if err != nil {
+				t.Fatalf("Render() returned error: %v", err)
+			}
+
+			for _, check := range tt.checks {
+				if !strings.Contains(got, check) {
+					t.Fatalf("Render() output does not contain %q\nfull output:\n%s", check, got)
+				}
+			}
+			for _, check := range tt.absent {
+				if strings.Contains(got, check) {
+					t.Fatalf("Render() output should not contain %q\nfull output:\n%s", check, got)
+				}
+			}
+		})
+	}
+}
+
+// --- Gap 12: Empty upstreams list in rendering ---
+
+func TestUnboundRendererEmptyUpstreams(t *testing.T) {
+	t.Parallel()
+
+	renderer := &UnboundRenderer{}
+	config := validUnboundConfig()
+	config.Upstreams = []engine.UpstreamConfig{}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	// With no upstreams, the forward-zone section should still be present
+	// but no forward-addr lines should appear.
+	if !strings.Contains(got, "forward-zone:") {
+		t.Fatalf("Render() output should contain forward-zone section\nfull output:\n%s", got)
+	}
+	if strings.Contains(got, "forward-addr:") {
+		t.Fatalf("Render() output should not contain forward-addr when upstreams are empty\nfull output:\n%s", got)
+	}
+}
+
+func TestUnboundRendererUpstreamPortZeroNormalization(t *testing.T) {
+	t.Parallel()
+
+	renderer := &UnboundRenderer{}
+	config := validUnboundConfig()
+	config.Upstreams = []engine.UpstreamConfig{
+		{Address: "9.9.9.9", Port: 0},
+	}
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	if !strings.Contains(got, "forward-addr: 9.9.9.9") {
+		t.Fatalf("Render() output does not contain normalized upstream\nfull output:\n%s", got)
+	}
+	if strings.Contains(got, "forward-addr: 9.9.9.9@0") {
+		t.Fatalf("Render() output should normalize port 0 to 53, not render @0\nfull output:\n%s", got)
+	}
+	if strings.Contains(got, "forward-addr: 9.9.9.9@53") {
+		t.Fatalf("Render() output should omit @53 for default port\nfull output:\n%s", got)
+	}
+}
+
+// --- Gap 14: Zero/negative cache values in rendering ---
+
+func TestUnboundRendererZeroCacheValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		cache  engine.CacheConfig
+		checks []string
+	}{
+		{
+			name: "MaxEntries zero",
+			cache: engine.CacheConfig{
+				MaxEntries:     0,
+				PositiveTtlMin: 60,
+				PositiveTtlMax: 300,
+				NegativeTtl:    30,
+			},
+			checks: []string{
+				"msg-cache-size: 0k",
+				"rrset-cache-size: 0k",
+			},
+		},
+		{
+			name: "NegativeTtl zero",
+			cache: engine.CacheConfig{
+				MaxEntries:     100000,
+				PositiveTtlMin: 60,
+				PositiveTtlMax: 300,
+				NegativeTtl:    0,
+			},
+			checks: []string{
+				"cache-max-negative-ttl: 0",
+			},
+		},
+		{
+			name: "PositiveTtlMin and PositiveTtlMax both zero",
+			cache: engine.CacheConfig{
+				MaxEntries:     100000,
+				PositiveTtlMin: 0,
+				PositiveTtlMax: 0,
+				NegativeTtl:    30,
+			},
+			checks: []string{
+				"cache-min-ttl: 0",
+				"cache-max-ttl: 0",
+			},
+		},
+		{
+			name: "very large MaxEntries",
+			cache: engine.CacheConfig{
+				MaxEntries:     10000000,
+				PositiveTtlMin: 60,
+				PositiveTtlMax: 300,
+				NegativeTtl:    30,
+			},
+			checks: []string{
+				"msg-cache-size:",
+				"rrset-cache-size:",
+			},
+		},
+	}
+
+	renderer := &UnboundRenderer{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			config := validUnboundConfig()
+			config.Cache = tt.cache
+
+			got, err := renderer.Render(config)
+			if err != nil {
+				t.Fatalf("Render() returned error: %v", err)
+			}
+
+			for _, check := range tt.checks {
+				if !strings.Contains(got, check) {
+					t.Fatalf("Render() output does not contain %q\nfull output:\n%s", check, got)
+				}
+			}
+		})
+	}
+}
+
+func TestUnboundRendererVeryLargeMaxEntriesCapped(t *testing.T) {
+	t.Parallel()
+
+	renderer := &UnboundRenderer{}
+	config := validUnboundConfig()
+	config.Cache.MaxEntries = 10000000
+
+	got, err := renderer.Render(config)
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+
+	// 10,000,000 * 1024 bytes = 10,240,000k = 10000m which exceeds the 256m cap.
+	// msg-cache-size should be capped at 256m, rrset-cache-size at 512m.
+	if !strings.Contains(got, "msg-cache-size: 256m") {
+		t.Fatalf("Render() should cap msg-cache-size at 256m for very large MaxEntries\nfull output:\n%s", got)
+	}
+	if !strings.Contains(got, "rrset-cache-size: 512m") {
+		t.Fatalf("Render() should cap rrset-cache-size at 512m for very large MaxEntries\nfull output:\n%s", got)
+	}
+}

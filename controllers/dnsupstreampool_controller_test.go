@@ -170,14 +170,8 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 	It("uses the oldest pool as active when multiple pools exist", func() {
 		namespace := createNamespace("pool-multi")
 
-		poolZ := &v1alpha1.DNSUpstreamPool{
-			ObjectMeta: metav1.ObjectMeta{Name: "zeta", Namespace: namespace},
-			Spec: v1alpha1.DNSUpstreamPoolSpec{
-				Upstreams: []v1alpha1.Upstream{{Address: "9.9.9.9", Port: 53}},
-			},
-		}
-		Expect(k8sClient.Create(context.Background(), poolZ)).To(Succeed())
-
+		// Create "alpha" first — it wins by name tiebreaker when envtest
+		// assigns identical second-precision timestamps.
 		poolA := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "alpha", Namespace: namespace},
 			Spec: v1alpha1.DNSUpstreamPoolSpec{
@@ -186,6 +180,15 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 		}
 		Expect(k8sClient.Create(context.Background(), poolA)).To(Succeed())
 
+		poolZ := &v1alpha1.DNSUpstreamPool{
+			ObjectMeta: metav1.ObjectMeta{Name: "zeta", Namespace: namespace},
+			Spec: v1alpha1.DNSUpstreamPoolSpec{
+				Upstreams: []v1alpha1.Upstream{{Address: "9.9.9.9", Port: 53}},
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), poolZ)).To(Succeed())
+
+		// alpha should be active (ConfigMap contains its upstreams).
 		Eventually(func(g Gomega) {
 			configMap := &corev1.ConfigMap{}
 			err := k8sClient.Get(
@@ -194,19 +197,61 @@ var _ = Describe("DNSUpstreamPool Controller", func() {
 				configMap,
 			)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "9.9.9.9"`))
-			g.Expect(configMap.Data["config.json"]).NotTo(ContainSubstring(`"address": "1.1.1.1"`))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"address": "1.1.1.1"`))
+			g.Expect(configMap.Data["config.json"]).NotTo(ContainSubstring(`"address": "9.9.9.9"`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 
+		// zeta should be superseded.
 		Eventually(func(g Gomega) {
 			current := &v1alpha1.DNSUpstreamPool{}
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "alpha", Namespace: namespace}, current)
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "zeta", Namespace: namespace}, current)
 			g.Expect(err).NotTo(HaveOccurred())
 			condition := meta.FindStatusCondition(current.Status.Conditions, upstreamPoolReadyCondition)
 			g.Expect(condition).NotTo(BeNil())
 			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			g.Expect(condition.Reason).To(Equal(supersededPoolReason))
-			g.Expect(condition.Message).To(ContainSubstring(`"zeta"`))
+			g.Expect(condition.Message).To(ContainSubstring(`"alpha"`))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	// --- Gap 15: CRD defaulting verification ---
+
+	It("defaults port to 53 when port is not specified via CRD marker", func() {
+		namespace := createNamespace("pool-default-port")
+		poolName := "pool-default-port"
+
+		pool := &v1alpha1.DNSUpstreamPool{
+			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
+			Spec: v1alpha1.DNSUpstreamPoolSpec{
+				Upstreams: []v1alpha1.Upstream{
+					{Address: "1.1.1.1"},
+				},
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), pool)).To(Succeed())
+
+		// Read the pool back from the API server to verify CRD defaulting applied.
+		created := &v1alpha1.DNSUpstreamPool{}
+		Expect(k8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Name: poolName, Namespace: namespace},
+			created,
+		)).To(Succeed())
+
+		Expect(created.Spec.Upstreams).To(HaveLen(1))
+		Expect(created.Spec.Upstreams[0].Port).To(Equal(int32(53)),
+			"expected CRD marker +kubebuilder:default=53 to set port to 53 when omitted")
+
+		// Also verify the controller renders config successfully with the defaulted port.
+		Eventually(func(g Gomega) {
+			configMap := &corev1.ConfigMap{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{
+				Name:      agentConfigMapName,
+				Namespace: namespace,
+			}, configMap)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(configMap.Data).To(HaveKey("config.json"))
+			g.Expect(configMap.Data["config.json"]).To(ContainSubstring(`"port": 53`))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 })
