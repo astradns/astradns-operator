@@ -204,6 +204,10 @@ clusterDNS:
     rolloutDeployment: coredns
     # -- Upstream target injected into DNS forward stanza (host:port or [ipv6]:port).
     forwardTarget: 169.254.20.11:5353
+    # -- Fallback upstream used when AstraDNS agent is unreachable.
+    # -- CoreDNS tries AstraDNS first and falls back to this target automatically.
+    # -- Set to empty string to disable fallback (not recommended).
+    fallbackUpstream: /etc/resolv.conf
     # -- Kubectl image used by patch job.
     kubectlImage: bitnami/kubectl:1.31.4
     # -- Image pull policy for cluster DNS patch job (Always, IfNotPresent, Never).

@@ -8,6 +8,7 @@
 {{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
 {{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
 {{- $clusterDNSForwardTarget := trim .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}
+{{- $clusterDNSFallbackUpstream := trim (default "" .Values.clusterDNS.forwardExternalToAstraDNS.fallbackUpstream) }}
 {{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
 {{- $clusterDNSKubectlImage := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage }}
 {{- $clusterDNSKubectlImagePullPolicy := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImagePullPolicy }}
@@ -75,6 +76,7 @@ spec:
               namespace="{{ $clusterDNSNamespace }}"
               configmap="{{ $clusterDNSConfigMapName }}"
               forward_target="{{ $clusterDNSForwardTarget }}"
+              fallback_upstream="{{ $clusterDNSFallbackUpstream }}"
               rollout_deployment="{{ $clusterDNSRolloutDeployment }}"
 
               corefile_path="/tmp/Corefile"
@@ -84,14 +86,23 @@ spec:
               kubectl -n "${namespace}" get configmap "${configmap}" -o jsonpath='{.data.Corefile}' > "${corefile_path}"
               cp "${corefile_path}" "${backup_path}"
 
+              # Build the forward block with optional fallback
+              if [ -n "${fallback_upstream}" ]; then
+                forward_block="forward . ${forward_target} ${fallback_upstream} {\n        policy sequential\n    }"
+              else
+                forward_block="forward . ${forward_target}"
+              fi
+
               if grep -Eq "forward \\. ${forward_target}([[:space:]]|$)" "${corefile_path}"; then
                 echo "CoreDNS already forwards to ${forward_target}"
               elif grep -Eq 'forward \\. /etc/resolv\.conf([[:space:]]|$)' "${corefile_path}"; then
-                sed -i "s|forward \\. /etc/resolv\\.conf|forward . ${forward_target}|g" "${corefile_path}"
-                echo "Updated CoreDNS forward target from /etc/resolv.conf to ${forward_target}"
+                awk -v block="${forward_block}" '/forward \. \/etc\/resolv\.conf/{printf "    %s\n", block; next}{print}' \
+                  "${corefile_path}" > "${corefile_path}.tmp" && mv "${corefile_path}.tmp" "${corefile_path}"
+                echo "Updated CoreDNS forward target from /etc/resolv.conf to ${forward_target} (fallback: ${fallback_upstream:-none})"
               elif grep -Eq 'forward \\. [^[:space:]]+([[:space:]]|$)' "${corefile_path}"; then
-                sed -i "0,/forward \\. [^[:space:]]\\+/s//forward . ${forward_target}/" "${corefile_path}"
-                echo "Updated first CoreDNS forward target to ${forward_target}"
+                awk -v block="${forward_block}" 'match($0, /forward \. [^ ]+/) && !done{printf "    %s\n", block; done=1; next}{print}' \
+                  "${corefile_path}" > "${corefile_path}.tmp" && mv "${corefile_path}.tmp" "${corefile_path}"
+                echo "Updated first CoreDNS forward target to ${forward_target} (fallback: ${fallback_upstream:-none})"
               else
                 echo "No CoreDNS forward stanza found in ${namespace}/${configmap}" >&2
                 exit 1
