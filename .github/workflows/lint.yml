@@ -17,6 +17,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Bootstrap sibling repositories
+        run: bash ./hack/bootstrap-monorepo.sh
+
       - name: Check linter configuration
         run: make lint-config
       - name: Run linter

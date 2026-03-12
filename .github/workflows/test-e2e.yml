@@ -17,6 +17,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Bootstrap sibling repositories
+        run: bash ./hack/bootstrap-monorepo.sh
+
       - name: Install the latest version of kind
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)

@@ -1,0 +1,99 @@
+name: Release Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  unit-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Bootstrap sibling repositories
+        run: bash ./hack/bootstrap-monorepo.sh
+
+      - name: Unit tests
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+  e2e:
+    needs: unit-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Bootstrap sibling repositories
+        run: bash ./hack/bootstrap-monorepo.sh
+
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Run E2E suite
+        run: make test-e2e
+
+  integration:
+    needs: unit-and-lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kind_node_image:
+          - kindest/node:v1.33.0
+          - kindest/node:v1.31.6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Bootstrap sibling repositories
+        run: bash ./hack/bootstrap-monorepo.sh --with-agent
+
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Build integration images
+        run: make build-integration-images
+
+      - name: Run integration tests
+        env:
+          KIND_NODE_IMAGE: ${{ matrix.kind_node_image }}
+        run: make test-integration
