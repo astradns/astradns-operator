@@ -26,6 +26,11 @@ This checklist is the release gate for promoting AstraDNS MVP to production.
 - [ ] cert-manager issuer configured (`webhook.certManager.issuerRef.name`).
 - [ ] Uniqueness policy validated (second `DNSUpstreamPool` create is denied).
 
+## 4.1) Operator service account hardening
+
+- [ ] `operator.serviceAccount.automountServiceAccountToken=true` set explicitly for in-cluster API auth.
+- [ ] Token mount rationale reviewed and accepted for the target environment.
+
 ## 5) CI release gate
 
 - [ ] Unit tests pass (`make test`).
