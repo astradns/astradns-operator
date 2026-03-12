@@ -111,6 +111,14 @@ func (g *DefaultConfigGenerator) Generate(
 		})
 	}
 
+	if len(pool.Spec.DomainFilter.Allow) > 0 || len(pool.Spec.DomainFilter.Deny) > 0 {
+		config.DomainFilter = engine.DomainFilterConfig{
+			Allow:  pool.Spec.DomainFilter.Allow,
+			Deny:   pool.Spec.DomainFilter.Deny,
+			Action: normalizeDomainFilterAction(pool.Spec.DomainFilter.Action),
+		}
+	}
+
 	if profile == nil {
 		return config, nil
 	}
@@ -202,6 +210,16 @@ func resolveWorkerThreads(value int32) int32 {
 	}
 
 	return auto
+}
+
+func normalizeDomainFilterAction(action string) engine.DomainFilterAction {
+	trimmed := strings.ToLower(strings.TrimSpace(action))
+	switch engine.DomainFilterAction(trimmed) {
+	case engine.DomainFilterActionNXDomain:
+		return engine.DomainFilterActionNXDomain
+	default:
+		return engine.DomainFilterActionRefused
+	}
 }
 
 func defaultTLSServerName(address string) string {
