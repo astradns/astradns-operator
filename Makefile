@@ -135,6 +135,19 @@ test-integration-matrix: ## Run integration tests against multiple K8s versions.
 	echo ""; \
 	echo "All K8s versions passed."
 
+.PHONY: test-slo
+test-slo: ## Run MVP SLO validation script against a cluster.
+	bash ./test/slo/validate-mvp.sh
+
+.PHONY: release-check
+release-check: ## Validate chart metadata and renderability for release.
+	bash ./hack/release-check.sh
+
+.PHONY: package-chart
+package-chart: ## Package Helm chart into dist/.
+	mkdir -p dist
+	helm package deploy/helm/astradns --destination dist
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run

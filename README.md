@@ -47,6 +47,42 @@ CRD changes --> Reconciler --> EngineConfig assembly
 
 The operator selects the config renderer via the `ASTRADNS_ENGINE_TYPE` environment variable (default: `unbound`). Supported values: `unbound`, `coredns`, `powerdns`.
 
+When deployed with Helm, this value is taken from `agent.engineType` and propagated to both operator and agent.
+
+## Helm Production Profile
+
+The chart includes a production profile at `deploy/helm/astradns/values-production.yaml` with:
+
+- Link-local data path (`agent.network.mode=linkLocal`, `169.254.20.11`)
+- Optional CoreDNS integration job (`coredns.integration.enabled=true`)
+- ServiceMonitor and Grafana dashboard ConfigMap enabled
+- Validating webhook enabled (cert-manager issuer still required)
+
+Install example:
+
+```sh
+helm upgrade --install astradns deploy/helm/astradns \
+  -n astradns-system --create-namespace \
+  -f deploy/helm/astradns/values-production.yaml \
+  --set webhook.certManager.issuerRef.name=<cluster-issuer-name>
+```
+
+## CoreDNS Integration
+
+With `coredns.integration.enabled=true`, Helm runs a post-install/post-upgrade job that patches the CoreDNS ConfigMap forward target to the AstraDNS link-local listener (`169.254.20.11:5353` by default).
+
+To avoid misconfiguration, CoreDNS integration requires `agent.network.mode=linkLocal`.
+
+## Engine Image Strategy
+
+The chart supports engine-specific image overrides via:
+
+- `agent.image` (default image)
+- `agent.engineImages.<engine>.repository`
+- `agent.engineImages.<engine>.tag`
+
+If an override repository is set for the selected engine, Helm uses that image; otherwise it falls back to `agent.image`.
+
 ## Prerequisites
 
 - Go 1.24.6+
@@ -95,6 +131,16 @@ make test
 # Run static analysis
 make vet
 ```
+
+## Release Gates
+
+Production release workflows and SLO validation assets live in:
+
+- `docs/production/go-live-checklist.md`
+- `docs/production/coredns-integration.md`
+- `docs/production/runbook.md`
+- `docs/production/slo-validation.md`
+- `docs/production/release-process.md`
 
 ## Contribution Policy
 
