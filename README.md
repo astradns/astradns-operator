@@ -75,6 +75,8 @@ With `clusterDNS.forwardExternalToAstraDNS.enabled=true`, Helm runs a post-insta
 
 `clusterDNS.provider` is currently validated to `coredns` when this integration is enabled.
 
+Helm validates integration inputs early: `namespace`, `configMapName`, and optional `rolloutDeployment` must be valid Kubernetes resource names, `forwardTarget` must be `host:port` (or `[ipv6]:port`), and `kubectlImagePullPolicy` must be one of `Always`, `IfNotPresent`, or `Never`.
+
 To avoid misconfiguration, cluster DNS integration requires `agent.network.mode=linkLocal`.
 
 The integration toggle remains explicit because some clusters patch CoreDNS out-of-band (GitOps/platform controllers), and Helm should not overwrite cluster DNS unless requested.
