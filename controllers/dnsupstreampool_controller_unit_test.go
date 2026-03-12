@@ -6,8 +6,11 @@ import (
 	"time"
 
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+const defaultTestNamespace = defaultCacheProfileName
 
 func TestResolvedAgentConfigMapName(t *testing.T) {
 	reconciler := &DNSUpstreamPoolReconciler{}
@@ -46,7 +49,7 @@ func TestValidateConfigMapPayloadSize(t *testing.T) {
 
 func TestConfigMapCircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) {
 	reconciler := &DNSUpstreamPoolReconciler{}
-	namespace := "default"
+	namespace := defaultTestNamespace
 
 	for range configMapUpdateFailureThreshold {
 		reconciler.recordConfigMapUpdateFailure(namespace)
@@ -59,7 +62,7 @@ func TestConfigMapCircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) {
 
 func TestConfigMapCircuitBreakerResetClearsState(t *testing.T) {
 	reconciler := &DNSUpstreamPoolReconciler{}
-	namespace := "default"
+	namespace := defaultTestNamespace
 
 	reconciler.recordConfigMapUpdateFailure(namespace)
 	reconciler.recordConfigMapUpdateFailure(namespace)
@@ -77,12 +80,56 @@ func TestConfigMapCircuitBreakerResetClearsState(t *testing.T) {
 func TestConfigMapCircuitBreakerExpiresOpenWindow(t *testing.T) {
 	reconciler := &DNSUpstreamPoolReconciler{
 		configMapCircuitOpenUntil: map[string]time.Time{
-			"default": time.Now().Add(-time.Second),
+			defaultTestNamespace: time.Now().Add(-time.Second),
 		},
 	}
 
-	if _, open := reconciler.isConfigMapCircuitOpen("default"); open {
+	if _, open := reconciler.isConfigMapCircuitOpen(defaultTestNamespace); open {
 		t.Fatal("expected expired configmap circuit breaker window to be closed")
+	}
+}
+
+func TestActivePoolSelectionMetricTracksCurrentPool(t *testing.T) {
+	activePoolSelectionGauge.Reset()
+	t.Cleanup(activePoolSelectionGauge.Reset)
+
+	reconciler := &DNSUpstreamPoolReconciler{}
+	namespace := defaultTestNamespace
+
+	reconciler.recordActivePoolSelectionMetric(namespace, "pool-a", poolSelectionReasonSingle)
+	if got := testutil.CollectAndCount(activePoolSelectionGauge); got != 1 {
+		t.Fatalf("expected one active pool metric series, got %d", got)
+	}
+	poolAMetric := activePoolSelectionGauge.WithLabelValues(namespace, "pool-a", poolSelectionReasonSingle)
+	if got := testutil.ToFloat64(poolAMetric); got != 1 {
+		t.Fatalf("expected pool-a metric value 1, got %.0f", got)
+	}
+
+	reconciler.recordActivePoolSelectionMetric(namespace, "pool-b", poolSelectionReasonOldest)
+	if got := testutil.CollectAndCount(activePoolSelectionGauge); got != 1 {
+		t.Fatalf("expected one active pool metric series after rotation, got %d", got)
+	}
+	poolBMetric := activePoolSelectionGauge.WithLabelValues(namespace, "pool-b", poolSelectionReasonOldest)
+	if got := testutil.ToFloat64(poolBMetric); got != 1 {
+		t.Fatalf("expected pool-b metric value 1, got %.0f", got)
+	}
+}
+
+func TestClearActivePoolSelectionMetricRemovesSeries(t *testing.T) {
+	activePoolSelectionGauge.Reset()
+	t.Cleanup(activePoolSelectionGauge.Reset)
+
+	reconciler := &DNSUpstreamPoolReconciler{}
+	namespace := defaultTestNamespace
+	reconciler.recordActivePoolSelectionMetric(namespace, "pool-a", poolSelectionReasonSingle)
+
+	reconciler.clearActivePoolSelectionMetric(namespace)
+
+	if got := testutil.CollectAndCount(activePoolSelectionGauge); got != 0 {
+		t.Fatalf("expected no active pool metric series after clear, got %d", got)
+	}
+	if _, exists := reconciler.activePoolMetricState[namespace]; exists {
+		t.Fatal("expected namespace state to be removed after metric clear")
 	}
 }
 

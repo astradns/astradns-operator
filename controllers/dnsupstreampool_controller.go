@@ -15,6 +15,7 @@ import (
 
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
 	typesengineconfig "github.com/astradns/astradns-types/engineconfig"
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -37,6 +39,9 @@ const (
 	agentConfigKey          = "config.json"
 	defaultCacheProfileName = "default"
 	supersededPoolReason    = "Superseded"
+
+	poolSelectionReasonSingle = "single_pool"
+	poolSelectionReasonOldest = "oldest_pool"
 
 	upstreamPoolReadyCondition = "Ready"
 
@@ -59,6 +64,23 @@ const (
 
 var errConfigMapCircuitOpen = errors.New("configmap update circuit breaker is open")
 
+var activePoolSelectionGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "astradns_active_pool_selected",
+		Help: "Indicates which DNSUpstreamPool is currently selected as active per namespace.",
+	},
+	[]string{"namespace", "pool", "reason"},
+)
+
+func init() {
+	ctrlmetrics.Registry.MustRegister(activePoolSelectionGauge)
+}
+
+type activePoolSelectionState struct {
+	poolName string
+	reason   string
+}
+
 // DNSUpstreamPoolReconciler reconciles DNSUpstreamPool objects.
 type DNSUpstreamPoolReconciler struct {
 	client.Client
@@ -70,6 +92,9 @@ type DNSUpstreamPoolReconciler struct {
 	configMapCircuitMu        sync.Mutex
 	configMapFailureCounts    map[string]int
 	configMapCircuitOpenUntil map[string]time.Time
+
+	activePoolMetricMu    sync.Mutex
+	activePoolMetricState map[string]activePoolSelectionState
 }
 
 // +kubebuilder:rbac:groups=dns.astradns.com,resources=dnsupstreampools,verbs=get;list;watch;update;patch
@@ -118,10 +143,11 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	activePoolName, poolCount, err := r.selectActivePoolName(ctx, pool.Namespace)
+	activePoolName, poolCount, selectionReason, err := r.selectActivePoolName(ctx, pool.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	r.recordActivePoolSelectionMetric(pool.Namespace, activePoolName, selectionReason)
 
 	if poolCount > 1 {
 		if pool.Name != activePoolName {
@@ -308,10 +334,16 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 
 	configNamespace := r.operatorNamespace(poolNamespace)
 	if len(pools.Items) == 0 {
+		r.clearActivePoolSelectionMetric(poolNamespace)
 		return r.removeConfigKey(ctx, configNamespace)
 	}
 
 	sortPoolsForSelection(pools.Items)
+	selectionReason := poolSelectionReasonSingle
+	if len(pools.Items) > 1 {
+		selectionReason = poolSelectionReasonOldest
+	}
+	r.recordActivePoolSelectionMetric(poolNamespace, pools.Items[0].Name, selectionReason)
 
 	if len(pools.Items) > 1 {
 		logger.Info("multiple DNSUpstreamPools in namespace, using oldest pool",
@@ -398,19 +430,83 @@ func validateConfigMapPayloadSize(renderedConfig string) error {
 	return nil
 }
 
-func (r *DNSUpstreamPoolReconciler) selectActivePoolName(ctx context.Context, namespace string) (string, int, error) {
+func (r *DNSUpstreamPoolReconciler) selectActivePoolName(
+	ctx context.Context,
+	namespace string,
+) (string, int, string, error) {
 	var pools v1alpha1.DNSUpstreamPoolList
 	if err := r.List(ctx, &pools, client.InNamespace(namespace)); err != nil {
-		return "", 0, fmt.Errorf("list DNSUpstreamPools in namespace %q: %w", namespace, err)
+		return "", 0, "", fmt.Errorf("list DNSUpstreamPools in namespace %q: %w", namespace, err)
 	}
 
 	if len(pools.Items) == 0 {
-		return "", 0, nil
+		return "", 0, "", nil
 	}
 
 	sortPoolsForSelection(pools.Items)
+	selectionReason := poolSelectionReasonSingle
+	if len(pools.Items) > 1 {
+		selectionReason = poolSelectionReasonOldest
+	}
 
-	return pools.Items[0].Name, len(pools.Items), nil
+	return pools.Items[0].Name, len(pools.Items), selectionReason, nil
+}
+
+func (r *DNSUpstreamPoolReconciler) recordActivePoolSelectionMetric(
+	namespace,
+	poolName,
+	selectionReason string,
+) {
+	if namespace == "" || poolName == "" {
+		return
+	}
+
+	if strings.TrimSpace(selectionReason) == "" {
+		selectionReason = poolSelectionReasonSingle
+	}
+
+	r.activePoolMetricMu.Lock()
+	defer r.activePoolMetricMu.Unlock()
+
+	if r.activePoolMetricState == nil {
+		r.activePoolMetricState = make(map[string]activePoolSelectionState)
+	}
+
+	if previous, exists := r.activePoolMetricState[namespace]; exists {
+		if previous.poolName == poolName && previous.reason == selectionReason {
+			activePoolSelectionGauge.WithLabelValues(namespace, poolName, selectionReason).Set(1)
+			return
+		}
+
+		activePoolSelectionGauge.DeleteLabelValues(namespace, previous.poolName, previous.reason)
+	}
+
+	activePoolSelectionGauge.WithLabelValues(namespace, poolName, selectionReason).Set(1)
+	r.activePoolMetricState[namespace] = activePoolSelectionState{
+		poolName: poolName,
+		reason:   selectionReason,
+	}
+}
+
+func (r *DNSUpstreamPoolReconciler) clearActivePoolSelectionMetric(namespace string) {
+	if namespace == "" {
+		return
+	}
+
+	r.activePoolMetricMu.Lock()
+	defer r.activePoolMetricMu.Unlock()
+
+	if r.activePoolMetricState == nil {
+		return
+	}
+
+	previous, exists := r.activePoolMetricState[namespace]
+	if !exists {
+		return
+	}
+
+	activePoolSelectionGauge.DeleteLabelValues(namespace, previous.poolName, previous.reason)
+	delete(r.activePoolMetricState, namespace)
 }
 
 func sortPoolsForSelection(items []v1alpha1.DNSUpstreamPool) {
