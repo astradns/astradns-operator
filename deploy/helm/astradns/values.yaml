@@ -156,7 +156,7 @@ clusterDNS:
     configMapName: coredns
     # -- Cluster DNS deployment to restart after patching (empty disables restart).
     rolloutDeployment: coredns
-    # -- Upstream target injected into DNS forward stanza.
+    # -- Upstream target injected into DNS forward stanza (host:port or [ipv6]:port).
     forwardTarget: 169.254.20.11:5353
     # -- Kubectl image used by patch job.
     kubectlImage: bitnami/kubectl:1.31.4

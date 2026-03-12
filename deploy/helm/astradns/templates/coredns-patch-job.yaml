@@ -19,6 +19,9 @@
 {{- if eq $clusterDNSForwardTarget "" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.forwardTarget must not be empty" }}
 {{- end }}
+{{- if not (or (regexMatch "^\\[[^\\]]+\\]:[0-9]+$" $clusterDNSForwardTarget) (regexMatch "^[^[:space:]:]+:[0-9]+$" $clusterDNSForwardTarget)) }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.forwardTarget must use host:port (or [ipv6]:port) format" }}
+{{- end }}
 {{- if eq $clusterDNSKubectlImage "" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.kubectlImage must not be empty" }}
 {{- end }}
