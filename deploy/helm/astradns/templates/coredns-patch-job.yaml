@@ -10,6 +10,7 @@
 {{- $clusterDNSForwardTarget := trim .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}
 {{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
 {{- $clusterDNSKubectlImage := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage }}
+{{- $clusterDNSKubectlImagePullPolicy := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImagePullPolicy }}
 {{- if eq $clusterDNSNamespace "" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.namespace must not be empty" }}
 {{- end }}
@@ -24,6 +25,9 @@
 {{- end }}
 {{- if eq $clusterDNSKubectlImage "" }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.kubectlImage must not be empty" }}
+{{- end }}
+{{- if not (has $clusterDNSKubectlImagePullPolicy (list "Always" "IfNotPresent" "Never")) }}
+{{- fail "clusterDNS.forwardExternalToAstraDNS.kubectlImagePullPolicy must be one of: Always, IfNotPresent, Never" }}
 {{- end }}
 apiVersion: batch/v1
 kind: Job
@@ -52,7 +56,7 @@ spec:
       containers:
         - name: coredns-patcher
           image: {{ $clusterDNSKubectlImage | quote }}
-          imagePullPolicy: {{ .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImagePullPolicy | quote }}
+          imagePullPolicy: {{ $clusterDNSKubectlImagePullPolicy | quote }}
           command:
             - /bin/sh
             - -ec
