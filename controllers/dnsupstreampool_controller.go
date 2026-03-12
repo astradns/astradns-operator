@@ -370,7 +370,10 @@ func initialRV(pool v1alpha1.DNSUpstreamPool) int64 {
 // ensureInitialRVAnnotation stamps the pool with its ResourceVersion at first
 // reconcile so that sortPoolsForSelection can use a stable, creation-ordered
 // tiebreaker. The annotation is written once and never updated.
-func (r *DNSUpstreamPoolReconciler) ensureInitialRVAnnotation(ctx context.Context, pool *v1alpha1.DNSUpstreamPool) error {
+func (r *DNSUpstreamPoolReconciler) ensureInitialRVAnnotation(
+	ctx context.Context,
+	pool *v1alpha1.DNSUpstreamPool,
+) error {
 	if pool.Annotations != nil {
 		if _, ok := pool.Annotations[initialRVAnnotation]; ok {
 			return nil // already stamped
