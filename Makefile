@@ -107,7 +107,7 @@ test-integration: ## Run full-stack integration tests (Kind + Helm + operator + 
 .PHONY: build-integration-images
 build-integration-images: ## Build operator and agent Docker images for integration tests.
 	$(CONTAINER_TOOL) build -f Dockerfile -t $(OPERATOR_IMG_INTEGRATION) ..
-	$(CONTAINER_TOOL) build -f ../astradns-agent/Dockerfile -t $(AGENT_IMG_INTEGRATION) ..
+	$(CONTAINER_TOOL) build -f ../astradns-agent/Dockerfile -t $(AGENT_IMG_INTEGRATION) ../astradns-agent
 
 # K8s version matrix — each entry is a Kind node image.
 # Update from: https://github.com/kubernetes-sigs/kind/releases
