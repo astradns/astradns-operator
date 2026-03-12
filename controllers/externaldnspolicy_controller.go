@@ -152,6 +152,9 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 		if trimmed == "" {
 			return fmt.Errorf("spec.selector.namespaces[%d] must not be empty", i)
 		}
+		if namespace != trimmed {
+			return fmt.Errorf("spec.selector.namespaces[%d] must not include leading or trailing whitespace", i)
+		}
 		if errs := validation.IsDNS1123Label(trimmed); len(errs) > 0 {
 			return fmt.Errorf("spec.selector.namespaces[%d] %q is not a valid namespace name", i, namespace)
 		}

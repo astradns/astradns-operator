@@ -19,7 +19,14 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		Expect(k8sClient.Create(context.Background(), profile)).To(Succeed())
 	}
 
-	createPolicyWithPool := func(namespace, poolName, policyName, upstreamPoolRef, cacheProfileRef string) {
+	createPolicyWithPoolAndSelector := func(
+		namespace,
+		poolName,
+		policyName string,
+		selectorNamespaces []string,
+		upstreamPoolRef,
+		cacheProfileRef string,
+	) {
 		pool := &v1alpha1.DNSUpstreamPool{
 			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
 			Spec: v1alpha1.DNSUpstreamPoolSpec{
@@ -31,12 +38,23 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		policy := &v1alpha1.ExternalDNSPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: namespace},
 			Spec: v1alpha1.ExternalDNSPolicySpec{
-				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
+				Selector:        v1alpha1.PolicySelector{Namespaces: selectorNamespaces},
 				UpstreamPoolRef: v1alpha1.ResourceRef{Name: upstreamPoolRef},
 				CacheProfileRef: v1alpha1.ResourceRef{Name: cacheProfileRef},
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
+	}
+
+	createPolicyWithPool := func(namespace, poolName, policyName, upstreamPoolRef, cacheProfileRef string) {
+		createPolicyWithPoolAndSelector(
+			namespace,
+			poolName,
+			policyName,
+			[]string{"target-ns"},
+			upstreamPoolRef,
+			cacheProfileRef,
+		)
 	}
 
 	It("sets Validated=True when upstream pool exists", func() {
@@ -245,23 +263,14 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		policyName := "policy-selector-empty"
 		createDefaultProfile(namespace)
 
-		pool := &v1alpha1.DNSUpstreamPool{
-			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
-			Spec: v1alpha1.DNSUpstreamPoolSpec{
-				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
-			},
-		}
-		Expect(k8sClient.Create(context.Background(), pool)).To(Succeed())
-
-		policy := &v1alpha1.ExternalDNSPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: namespace},
-			Spec: v1alpha1.ExternalDNSPolicySpec{
-				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns", "   "}},
-				UpstreamPoolRef: v1alpha1.ResourceRef{Name: poolName},
-				CacheProfileRef: v1alpha1.ResourceRef{Name: "default"},
-			},
-		}
-		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
+		createPolicyWithPoolAndSelector(
+			namespace,
+			poolName,
+			policyName,
+			[]string{"target-ns", "   "},
+			poolName,
+			"default",
+		)
 
 		Eventually(func(g Gomega) {
 			current := &v1alpha1.ExternalDNSPolicy{}
@@ -271,6 +280,34 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			g.Expect(condition).NotTo(BeNil())
 			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			g.Expect(condition.Message).To(ContainSubstring("spec.selector.namespaces[1] must not be empty"))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("sets Validated=False when selector namespace entry has surrounding whitespace", func() {
+		namespace := createNamespace("policy-invalid-selector-padding")
+		poolName := "pool-selector-padding"
+		policyName := "policy-selector-padding"
+		createDefaultProfile(namespace)
+
+		createPolicyWithPoolAndSelector(
+			namespace,
+			poolName,
+			policyName,
+			[]string{"target-ns", " target-ns"},
+			poolName,
+			"default",
+		)
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: policyName, Namespace: namespace}, current)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(condition.Message).To(
+				ContainSubstring("spec.selector.namespaces[1] must not include leading or trailing whitespace"),
+			)
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
