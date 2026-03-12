@@ -172,7 +172,11 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 		return fmt.Errorf("get referenced upstream pool %q: %w", upstreamPoolName, err)
 	}
 
-	cacheProfileName := strings.TrimSpace(policy.Spec.CacheProfileRef.Name)
+	cacheProfileRaw := policy.Spec.CacheProfileRef.Name
+	cacheProfileName := strings.TrimSpace(cacheProfileRaw)
+	if cacheProfileRaw != "" && cacheProfileName == "" {
+		return errors.New("spec.cacheProfileRef.name must not be whitespace")
+	}
 	if cacheProfileName == "" {
 		return nil
 	}

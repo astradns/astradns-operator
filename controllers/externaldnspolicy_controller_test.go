@@ -19,6 +19,26 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		Expect(k8sClient.Create(context.Background(), profile)).To(Succeed())
 	}
 
+	createPolicyWithPool := func(namespace, poolName, policyName, cacheProfileRef string) {
+		pool := &v1alpha1.DNSUpstreamPool{
+			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
+			Spec: v1alpha1.DNSUpstreamPoolSpec{
+				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), pool)).To(Succeed())
+
+		policy := &v1alpha1.ExternalDNSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: namespace},
+			Spec: v1alpha1.ExternalDNSPolicySpec{
+				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
+				UpstreamPoolRef: v1alpha1.ResourceRef{Name: poolName},
+				CacheProfileRef: v1alpha1.ResourceRef{Name: cacheProfileRef},
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
+	}
+
 	It("sets Validated=True when upstream pool exists", func() {
 		namespace := createNamespace("policy-valid")
 		poolName := "pool-a"
@@ -130,23 +150,7 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 		poolName := "pool-cache-missing"
 		policyName := "policy-cache-missing"
 
-		pool := &v1alpha1.DNSUpstreamPool{
-			ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: namespace},
-			Spec: v1alpha1.DNSUpstreamPoolSpec{
-				Upstreams: []v1alpha1.Upstream{{Address: "1.1.1.1", Port: 53}},
-			},
-		}
-		Expect(k8sClient.Create(context.Background(), pool)).To(Succeed())
-
-		policy := &v1alpha1.ExternalDNSPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: namespace},
-			Spec: v1alpha1.ExternalDNSPolicySpec{
-				Selector:        v1alpha1.PolicySelector{Namespaces: []string{"target-ns"}},
-				UpstreamPoolRef: v1alpha1.ResourceRef{Name: poolName},
-				CacheProfileRef: v1alpha1.ResourceRef{Name: "nonexistent-profile"},
-			},
-		}
-		Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
+		createPolicyWithPool(namespace, poolName, policyName, "nonexistent-profile")
 
 		Eventually(func(g Gomega) {
 			current := &v1alpha1.ExternalDNSPolicy{}
@@ -156,6 +160,24 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			g.Expect(condition).NotTo(BeNil())
 			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			g.Expect(condition.Message).To(ContainSubstring("nonexistent-profile"))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("sets Validated=False when cacheProfileRef name is whitespace-only", func() {
+		namespace := createNamespace("policy-cache-whitespace")
+		poolName := "pool-cache-whitespace"
+		policyName := "policy-cache-whitespace"
+
+		createPolicyWithPool(namespace, poolName, policyName, "   ")
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: policyName, Namespace: namespace}, current)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(condition.Message).To(ContainSubstring("spec.cacheProfileRef.name must not be whitespace"))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 
