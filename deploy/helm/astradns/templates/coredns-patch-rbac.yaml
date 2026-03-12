@@ -9,6 +9,10 @@
 {{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
 {{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
 {{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
+{{- $centralServiceName := include "astradns.agent.dnsServiceName" . }}
+{{- $centralServiceNamespace := include "astradns.namespace" . }}
+{{- $centralForwardTarget := include "astradns.agent.centralForwardTarget" . | trim }}
+{{- $autoResolveCentralForwardTarget := and (eq $profile "central") (eq $centralForwardTarget "") }}
 {{- $dnsLabelPattern := "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" }}
 {{- $dnsSubdomainPattern := "^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" }}
 {{- if eq $clusterDNSNamespace "" }}
@@ -78,4 +82,39 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "astradns.fullname" . }}-coredns-patcher
     namespace: {{ include "astradns.namespace" . }}
+{{- if $autoResolveCentralForwardTarget }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "astradns.fullname" . }}-coredns-patcher-service-reader
+  namespace: {{ $centralServiceNamespace }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    resourceNames:
+      - {{ $centralServiceName }}
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "astradns.fullname" . }}-coredns-patcher-service-reader
+  namespace: {{ $centralServiceNamespace }}
+  labels:
+    {{- include "astradns.operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "astradns.fullname" . }}-coredns-patcher-service-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "astradns.fullname" . }}-coredns-patcher
+    namespace: {{ include "astradns.namespace" . }}
+{{- end }}
 {{- end }}

@@ -1,4 +1,5 @@
 {{- $profile := include "astradns.agent.topology.profile" . -}}
+{{- $clusterIP := include "astradns.agent.dnsServiceClusterIP" . | trim -}}
 {{- if eq $profile "central" }}
 apiVersion: v1
 kind: Service
@@ -9,6 +10,9 @@ metadata:
     {{- include "astradns.agent.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.agent.dnsService.type }}
+  {{- if ne $clusterIP "" }}
+  clusterIP: {{ $clusterIP | quote }}
+  {{- end }}
   {{- if .Values.agent.dnsService.sessionAffinity }}
   sessionAffinity: {{ .Values.agent.dnsService.sessionAffinity }}
   {{- if eq .Values.agent.dnsService.sessionAffinity "ClientIP" }}

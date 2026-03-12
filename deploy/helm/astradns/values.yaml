@@ -186,6 +186,11 @@ agent:
   dnsService:
     # -- Service type.
     type: ClusterIP
+    # -- Optional fixed ClusterIP for the central DNS Service.
+    # -- Set this to a reserved Service IP (for example 10.96.0.53) to keep
+    # -- CoreDNS forward target stable across service recreation events.
+    # -- Leave empty to let Kubernetes allocate it dynamically.
+    clusterIP: ""
     # -- DNS port exposed by the Service.
     port: 53
     # -- Session affinity to keep DNS cache warm per client IP.
@@ -242,7 +247,9 @@ clusterDNS:
     configMapName: coredns
     # -- Cluster DNS deployment to restart after patching (empty disables restart).
     rolloutDeployment: coredns
-    # -- Upstream target injected into DNS forward stanza (host:port or [ipv6]:port).
+    # -- Upstream target injected into DNS forward stanza (host:port or [ipv6]:port)
+    # -- for node-local profile. In central profile, the chart computes the target
+    # -- automatically from agent.dnsService.clusterIP (preferred) or service discovery.
     forwardTarget: 169.254.20.11:5353
     # -- Fallback upstream used when AstraDNS agent is unreachable.
     # -- CoreDNS tries AstraDNS first and falls back to this target automatically.

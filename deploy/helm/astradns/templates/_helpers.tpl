@@ -175,13 +175,58 @@ DNS Service FQDN for central mode CoreDNS forwarding
 {{- end }}
 
 {{/*
+Join host and port while preserving IPv6 bracket format.
+*/}}
+{{- define "astradns.joinHostPort" -}}
+{{- $host := .host -}}
+{{- $port := toString .port -}}
+{{- if contains ":" $host -}}
+{{- printf "[%s]:%s" $host $port -}}
+{{- else -}}
+{{- printf "%s:%s" $host $port -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Optional fixed ClusterIP for central DNS service.
+*/}}
+{{- define "astradns.agent.dnsServiceClusterIP" -}}
+{{- $clusterIP := trim (default "" .Values.agent.dnsService.clusterIP) -}}
+{{- if ne $clusterIP "" -}}
+{{- $ipv4Pattern := "^((25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])$" -}}
+{{- $ipv6Pattern := "^[0-9a-fA-F:]+$" -}}
+{{- if not (or (regexMatch $ipv4Pattern $clusterIP) (regexMatch $ipv6Pattern $clusterIP)) -}}
+{{- fail "agent.dnsService.clusterIP must be a valid IPv4 or IPv6 address when set" -}}
+{{- end -}}
+{{- end -}}
+{{- $clusterIP -}}
+{{- end }}
+
+{{/*
+Central-mode forward target when fixed service ClusterIP is provided.
+Returns empty string when dynamic service discovery should be used.
+*/}}
+{{- define "astradns.agent.centralForwardTarget" -}}
+{{- $clusterIP := include "astradns.agent.dnsServiceClusterIP" . | trim -}}
+{{- if ne $clusterIP "" -}}
+{{- include "astradns.joinHostPort" (dict "host" $clusterIP "port" (default 53 .Values.agent.dnsService.port)) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 CoreDNS forward target — auto-computed based on topology profile.
-Central mode uses the DNS Service FQDN; node-local uses the configured target.
+Central mode prefers fixed DNS Service ClusterIP and falls back to Service FQDN.
+Node-local uses the configured static target.
 */}}
 {{- define "astradns.agent.corednsForwardTarget" -}}
 {{- $profile := include "astradns.agent.topology.profile" . -}}
 {{- if eq $profile "central" -}}
+{{- $centralTarget := include "astradns.agent.centralForwardTarget" . | trim -}}
+{{- if ne $centralTarget "" -}}
+{{- $centralTarget -}}
+{{- else -}}
 {{- printf "%s:%s" (include "astradns.agent.dnsServiceFQDN" .) (toString (default 53 .Values.agent.dnsService.port)) -}}
+{{- end -}}
 {{- else -}}
 {{- .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget -}}
 {{- end -}}

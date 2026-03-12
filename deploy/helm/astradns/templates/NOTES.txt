@@ -7,7 +7,12 @@ Topology profile: {{ $profile }}
 === Central Mode ===
 Agent Deployment: {{ .Values.agent.deployment.replicas }} replica(s)
 DNS Service: {{ include "astradns.agent.dnsServiceName" . }} ({{ .Values.agent.dnsService.type }}, port {{ .Values.agent.dnsService.port }})
-CoreDNS forward target: {{ include "astradns.agent.dnsServiceFQDN" . }}:{{ .Values.agent.dnsService.port }}
+{{- $fixedClusterIP := include "astradns.agent.dnsServiceClusterIP" . | trim }}
+{{- if ne $fixedClusterIP "" }}
+CoreDNS forward target: {{ include "astradns.agent.centralForwardTarget" . }} (fixed Service ClusterIP)
+{{- else }}
+CoreDNS forward target: {{ include "astradns.agent.dnsServiceFQDN" . }}:{{ .Values.agent.dnsService.port }} (service-discovery fallback)
+{{- end }}
 {{- if lt (int .Values.agent.deployment.replicas) 2 }}
 
 WARNING: Running central mode with fewer than 2 replicas provides no high availability.

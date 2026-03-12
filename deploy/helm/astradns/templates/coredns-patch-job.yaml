@@ -8,7 +8,18 @@
 {{- end }}
 {{- $clusterDNSNamespace := trim .Values.clusterDNS.forwardExternalToAstraDNS.namespace }}
 {{- $clusterDNSConfigMapName := trim .Values.clusterDNS.forwardExternalToAstraDNS.configMapName }}
-{{- $clusterDNSForwardTarget := include "astradns.agent.corednsForwardTarget" . | trim }}
+{{- $clusterDNSForwardTarget := trim .Values.clusterDNS.forwardExternalToAstraDNS.forwardTarget }}
+{{- $centralForwardTarget := include "astradns.agent.centralForwardTarget" . | trim }}
+{{- $centralServiceName := include "astradns.agent.dnsServiceName" . }}
+{{- $centralServiceNamespace := include "astradns.namespace" . }}
+{{- $centralServicePort := toString (default 53 .Values.agent.dnsService.port) }}
+{{- $autoResolveCentralForwardTarget := false }}
+{{- if eq $profile "central" }}
+{{- $clusterDNSForwardTarget = $centralForwardTarget }}
+{{- if eq $centralForwardTarget "" }}
+{{- $autoResolveCentralForwardTarget = true }}
+{{- end }}
+{{- end }}
 {{- $clusterDNSFallbackUpstream := trim (default "" .Values.clusterDNS.forwardExternalToAstraDNS.fallbackUpstream) }}
 {{- $clusterDNSRolloutDeployment := trim .Values.clusterDNS.forwardExternalToAstraDNS.rolloutDeployment }}
 {{- $clusterDNSKubectlImage := trim .Values.clusterDNS.forwardExternalToAstraDNS.kubectlImage }}
@@ -27,10 +38,10 @@
 {{- if not (regexMatch $dnsSubdomainPattern $clusterDNSConfigMapName) }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.configMapName must be a valid Kubernetes resource name" }}
 {{- end }}
-{{- if eq $clusterDNSForwardTarget "" }}
+{{- if and (not $autoResolveCentralForwardTarget) (eq $clusterDNSForwardTarget "") }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.forwardTarget must not be empty" }}
 {{- end }}
-{{- if not (or (regexMatch "^\\[[^\\]]+\\]:[0-9]+$" $clusterDNSForwardTarget) (regexMatch "^[^[:space:]:]+:[0-9]+$" $clusterDNSForwardTarget)) }}
+{{- if and (not $autoResolveCentralForwardTarget) (not (or (regexMatch "^\\[[^\\]]+\\]:[0-9]+$" $clusterDNSForwardTarget) (regexMatch "^[^[:space:]:]+:[0-9]+$" $clusterDNSForwardTarget))) }}
 {{- fail "clusterDNS.forwardExternalToAstraDNS.forwardTarget must use host:port (or [ipv6]:port) format" }}
 {{- end }}
 {{- if eq $clusterDNSKubectlImage "" }}
@@ -79,10 +90,32 @@ spec:
               forward_target="{{ $clusterDNSForwardTarget }}"
               fallback_upstream="{{ $clusterDNSFallbackUpstream }}"
               rollout_deployment="{{ $clusterDNSRolloutDeployment }}"
+              profile="{{ $profile }}"
+              auto_resolve_central_forward_target="{{ ternary "true" "false" $autoResolveCentralForwardTarget }}"
+              central_service_name="{{ $centralServiceName }}"
+              central_service_namespace="{{ $centralServiceNamespace }}"
+              central_service_port="{{ $centralServicePort }}"
 
               corefile_path="/tmp/Corefile"
               backup_path="/tmp/Corefile.backup"
               patch_file="/tmp/patch.yaml"
+
+              if [ "${profile}" = "central" ] && [ "${auto_resolve_central_forward_target}" = "true" ]; then
+                service_cluster_ip="$(kubectl -n "${central_service_namespace}" get service "${central_service_name}" -o jsonpath='{.spec.clusterIP}')"
+                if [ -z "${service_cluster_ip}" ] || [ "${service_cluster_ip}" = "None" ]; then
+                  echo "Unable to resolve clusterIP for ${central_service_namespace}/${central_service_name}" >&2
+                  exit 1
+                fi
+
+                case "${service_cluster_ip}" in
+                  *:*)
+                    forward_target="[${service_cluster_ip}]:${central_service_port}"
+                    ;;
+                  *)
+                    forward_target="${service_cluster_ip}:${central_service_port}"
+                    ;;
+                esac
+              fi
 
               kubectl -n "${namespace}" get configmap "${configmap}" -o jsonpath='{.data.Corefile}' > "${corefile_path}"
               cp "${corefile_path}" "${backup_path}"
