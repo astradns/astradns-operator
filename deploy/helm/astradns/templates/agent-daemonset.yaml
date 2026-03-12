@@ -74,6 +74,14 @@ spec:
               value: {{ .Values.agent.engineRecoveryInterval | quote }}
             - name: ASTRADNS_COMPONENT_ERROR_BUFFER
               value: {{ .Values.agent.componentErrorBuffer | quote }}
+            - name: ASTRADNS_DIAGNOSTICS_ENABLED
+              value: {{ .Values.agent.diagnostics.enabled | quote }}
+            - name: ASTRADNS_DIAGNOSTICS_TARGETS
+              value: {{ .Values.agent.diagnostics.targets | quote }}
+            - name: ASTRADNS_DIAGNOSTICS_INTERVAL
+              value: {{ .Values.agent.diagnostics.interval | quote }}
+            - name: ASTRADNS_DIAGNOSTICS_TIMEOUT
+              value: {{ .Values.agent.diagnostics.timeout | quote }}
             - name: ASTRADNS_TRACING_ENABLED
               value: {{ .Values.agent.tracing.enabled | quote }}
             - name: ASTRADNS_TRACING_ENDPOINT

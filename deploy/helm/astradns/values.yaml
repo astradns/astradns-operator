@@ -73,7 +73,7 @@ agent:
     tag: "v0.2.0"  # Defaults to a published stable tag. Set empty to use v<appVersion>.
     pullPolicy: IfNotPresent
   # -- Optional engine-specific image overrides keyed by engine type.
-  # -- When repository is empty for the selected engine, chart falls back to agent.image.
+  # -- When repository is empty for the selected engine, chart falls back to agent.image with -<engine> tag suffix.
   engineImages:
     unbound:
       repository: ""
@@ -84,7 +84,10 @@ agent:
     powerdns:
       repository: ""
       tag: ""
-  # -- DNS engine type: unbound, coredns, or powerdns
+    bind:
+      repository: ""
+      tag: ""
+  # -- DNS engine type: unbound, coredns, powerdns, or bind
   engineType: unbound
   network:
     # -- Data-path mode for agent DNS listener: hostPort or linkLocal
@@ -112,6 +115,15 @@ agent:
   metrics:
     # -- Optional bearer token required for /metrics access (empty disables token check).
     bearerToken: ""
+  diagnostics:
+    # -- Enable external endpoint diagnostics report at /diagnostics.
+    enabled: false
+    # -- Comma-separated diagnostic targets (e.g. s3.us-west-004.backblazeb2.com).
+    targets: ""
+    # -- Interval between diagnostics probe cycles.
+    interval: 1m
+    # -- Timeout for each diagnostics probe stage.
+    timeout: 3s
   tracing:
     # -- Enable OpenTelemetry tracing for agent control-plane operations.
     enabled: false
