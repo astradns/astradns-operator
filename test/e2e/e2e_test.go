@@ -20,11 +20,13 @@ limitations under the License.
 package e2e
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
+	"net"
+	"net/http"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -45,6 +47,9 @@ const metricsServiceName = "astradns-operator-controller-manager-metrics-service
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "astradns-operator-metrics-binding"
+
+// metricsReaderRoleName is the prefixed ClusterRole created by kustomize.
+const metricsReaderRoleName = "astradns-operator-metrics-reader"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -205,7 +210,7 @@ var _ = Describe("Manager", Ordered, func() {
 				metricsOutput, err := getMetricsOutput()
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve metrics output")
 				g.Expect(metricsOutput).NotTo(BeEmpty())
-				g.Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
+				g.Expect(metricsOutput).To(ContainSubstring("controller_runtime_reconcile_total"))
 			}
 			Eventually(verifyMetricsAvailable, 2*time.Minute).Should(Succeed())
 		})
@@ -512,45 +517,24 @@ spec:
 	})
 })
 
-// serviceAccountToken returns a token for the specified service account in the given namespace.
-// It uses the Kubernetes TokenRequest API to generate a token by directly sending a request
-// and parsing the resulting token from the API response.
+// serviceAccountToken returns a token for the operator service account.
 func serviceAccountToken() (string, error) {
-	const tokenRequestRawString = `{
-		"apiVersion": "authentication.k8s.io/v1",
-		"kind": "TokenRequest"
-	}`
+	cmd := exec.Command(
+		"kubectl",
+		"create",
+		"token",
+		serviceAccountName,
+		"-n",
+		namespace,
+		"--duration=10m",
+	)
 
-	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
-	tokenRequestFile := filepath.Join("/tmp", secretName)
-	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
+	output, err := utils.Run(cmd)
 	if err != nil {
 		return "", err
 	}
 
-	var out string
-	verifyTokenCreation := func(g Gomega) {
-		// Execute kubectl command to create the token
-		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
-			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
-			namespace,
-			serviceAccountName,
-		), "-f", tokenRequestFile)
-
-		output, err := cmd.CombinedOutput()
-		g.Expect(err).NotTo(HaveOccurred())
-
-		// Parse the JSON output to extract the token
-		var token tokenRequest
-		err = json.Unmarshal(output, &token)
-		g.Expect(err).NotTo(HaveOccurred())
-
-		out = token.Status.Token
-	}
-	Eventually(verifyTokenCreation).Should(Succeed())
-
-	return out, err
+	return strings.TrimSpace(output), nil
 }
 
 // ensureMetricsReaderBinding creates/updates the ClusterRoleBinding needed to read /metrics.
@@ -562,12 +546,12 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: metrics-reader
+  name: %s
 subjects:
 - kind: ServiceAccount
   name: %s
   namespace: %s
-`, metricsRoleBindingName, serviceAccountName, namespace)
+`, metricsRoleBindingName, metricsReaderRoleName, serviceAccountName, namespace)
 
 	cmd := exec.Command("kubectl", "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(binding)
@@ -575,45 +559,74 @@ subjects:
 	return err
 }
 
-// getMetricsOutput retrieves metrics by creating a fresh curl pod for each request.
+// getMetricsOutput retrieves metrics through the Kubernetes API service proxy.
 func getMetricsOutput() (string, error) {
 	token, err := serviceAccountToken()
 	if err != nil {
 		return "", err
 	}
 
-	podName := fmt.Sprintf("curl-metrics-%d", time.Now().UnixNano())
-	curlCmd := fmt.Sprintf(
-		"curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics",
-		token,
-		metricsServiceName,
-		namespace,
-	)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	localPort := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
 
-	cmd := exec.Command(
+	portForwardCmd := exec.Command(
 		"kubectl",
-		"run",
-		podName,
+		"port-forward",
 		"-n",
 		namespace,
-		"--rm",
-		"-i",
-		"--restart=Never",
-		"--image=curlimages/curl:8.12.1",
-		"--command",
-		"--",
-		"sh",
-		"-c",
-		curlCmd,
+		fmt.Sprintf("service/%s", metricsServiceName),
+		fmt.Sprintf("%d:8443", localPort),
 	)
+	if err := portForwardCmd.Start(); err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = portForwardCmd.Process.Kill()
+		_ = portForwardCmd.Wait()
+	}()
 
-	return utils.Run(cmd)
-}
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
 
-// tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,
-// containing only the token field that we need to extract.
-type tokenRequest struct {
-	Status struct {
-		Token string `json:"token"`
-	} `json:"status"`
+	url := fmt.Sprintf("https://127.0.0.1:%d/metrics", localPort)
+	deadline := time.Now().Add(20 * time.Second)
+	var errs []string
+
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+		resp, err := client.Do(req)
+		if err != nil {
+			errs = append(errs, err.Error())
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return "", readErr
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			return string(body), nil
+		}
+
+		errs = append(errs, fmt.Sprintf("status %d: %s", resp.StatusCode, string(body)))
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	return "", fmt.Errorf("failed to retrieve metrics through port-forward: %s", strings.Join(errs, "; "))
 }
