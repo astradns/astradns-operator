@@ -6,6 +6,7 @@ import (
 	v1alpha1 "github.com/astradns/astradns-types/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -88,6 +89,137 @@ var _ = Describe("ExternalDNSPolicy Controller", func() {
 			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
 			g.Expect(condition).NotTo(BeNil())
 			g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("enforces policy by annotating selected namespaces", func() {
+		policyNamespace := createNamespace("policy-enforce")
+		targetNamespace := createNamespace("target-enforce")
+		poolName := "pool-enforce"
+		policyName := "policy-enforce"
+		createDefaultProfile(policyNamespace)
+
+		createPolicyWithPoolAndSelector(
+			policyNamespace,
+			poolName,
+			policyName,
+			[]string{targetNamespace},
+			poolName,
+			"default",
+		)
+
+		Eventually(func(g Gomega) {
+			namespace := &corev1.Namespace{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: targetNamespace}, namespace)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(namespace.Annotations).To(HaveKeyWithValue(
+				namespacePolicyNameAnnotation,
+				policyNamespace+"/"+policyName,
+			))
+			g.Expect(namespace.Annotations).To(HaveKeyWithValue(namespacePolicyUpstreamRefAnnotation, poolName))
+			g.Expect(namespace.Annotations).To(HaveKeyWithValue(namespacePolicyCacheRefAnnotation, "default"))
+			g.Expect(namespace.Annotations).To(HaveKey(namespacePolicyOwnerUIDAnnotation))
+			g.Expect(namespace.Annotations[namespacePolicyOwnerUIDAnnotation]).NotTo(BeEmpty())
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("sets Validated=False when another policy already manages a selected namespace", func() {
+		targetNamespace := createNamespace("target-conflict")
+
+		policyNamespaceA := createNamespace("policy-a")
+		poolNameA := "pool-a"
+		policyNameA := "policy-a"
+		createDefaultProfile(policyNamespaceA)
+		createPolicyWithPoolAndSelector(
+			policyNamespaceA,
+			poolNameA,
+			policyNameA,
+			[]string{targetNamespace},
+			poolNameA,
+			"default",
+		)
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(
+				context.Background(),
+				types.NamespacedName{Name: policyNameA, Namespace: policyNamespaceA},
+				current,
+			)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+
+		policyNamespaceB := createNamespace("policy-b")
+		poolNameB := "pool-b"
+		policyNameB := "policy-b"
+		createDefaultProfile(policyNamespaceB)
+		createPolicyWithPoolAndSelector(
+			policyNamespaceB,
+			poolNameB,
+			policyNameB,
+			[]string{targetNamespace},
+			poolNameB,
+			"default",
+		)
+
+		Eventually(func(g Gomega) {
+			current := &v1alpha1.ExternalDNSPolicy{}
+			err := k8sClient.Get(
+				context.Background(),
+				types.NamespacedName{Name: policyNameB, Namespace: policyNamespaceB},
+				current,
+			)
+			g.Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(current.Status.Conditions, externalPolicyValidatedCondition)
+			g.Expect(condition).NotTo(BeNil())
+			g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(condition.Reason).To(Equal("EnforcementFailed"))
+			g.Expect(condition.Message).To(ContainSubstring("already managed"))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+	})
+
+	It("removes namespace policy annotations when policy is deleted", func() {
+		policyNamespace := createNamespace("policy-cleanup")
+		targetNamespace := createNamespace("target-cleanup")
+		poolName := "pool-cleanup"
+		policyName := "policy-cleanup"
+		createDefaultProfile(policyNamespace)
+
+		createPolicyWithPoolAndSelector(
+			policyNamespace,
+			poolName,
+			policyName,
+			[]string{targetNamespace},
+			poolName,
+			"default",
+		)
+
+		Eventually(func(g Gomega) {
+			namespace := &corev1.Namespace{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: targetNamespace}, namespace)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(namespace.Annotations).To(HaveKey(namespacePolicyOwnerUIDAnnotation))
+		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
+
+		policy := &v1alpha1.ExternalDNSPolicy{}
+		Expect(k8sClient.Get(
+			context.Background(),
+			types.NamespacedName{Name: policyName, Namespace: policyNamespace},
+			policy,
+		)).To(Succeed())
+		Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			namespace := &corev1.Namespace{}
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: targetNamespace}, namespace)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(namespace.Annotations).NotTo(HaveKey(namespacePolicyOwnerUIDAnnotation))
+			g.Expect(namespace.Annotations).NotTo(HaveKey(namespacePolicyNameAnnotation))
+			g.Expect(namespace.Annotations).NotTo(HaveKey(namespacePolicyUpstreamRefAnnotation))
+			g.Expect(namespace.Annotations).NotTo(HaveKey(namespacePolicyCacheRefAnnotation))
 		}, eventuallyTimeout, eventuallyPoll).Should(Succeed())
 	})
 

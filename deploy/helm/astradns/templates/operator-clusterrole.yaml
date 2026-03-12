@@ -22,6 +22,13 @@ rules:
   - apiGroups:
       - dns.astradns.com
     resources:
+      - externaldnspolicies/finalizers
+    verbs:
+      - update
+  # CRD status subresource
+  - apiGroups:
+      - dns.astradns.com
+    resources:
       - dnsupstreampools/status
       - dnscacheprofiles/status
       - externaldnspolicies/status
@@ -40,6 +47,17 @@ rules:
       - watch
       - create
       - update
+  # Namespace policy annotation management
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
   # Event recording
   - apiGroups:
       - ""

@@ -36,6 +36,12 @@ rules:
 - apiGroups:
   - dns.astradns.com
   resources:
+  - externaldnspolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - dns.astradns.com
+  resources:
   - dnscacheprofiles/status
   - dnsupstreampools/status
   - externaldnspolicies/status
@@ -43,3 +49,13 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
