@@ -39,6 +39,14 @@ clusterDNS:
     configMapName: coredns
     rolloutDeployment: coredns
     forwardTarget: 169.254.20.11:5353
+    kubectlImagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
 
 operator:
   priorityClassName: system-cluster-critical
