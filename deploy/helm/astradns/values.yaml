@@ -160,6 +160,14 @@ clusterDNS:
     kubectlImage: bitnami/kubectl:1.31.4
     # -- Image pull policy for cluster DNS patch job.
     kubectlImagePullPolicy: IfNotPresent
+    # -- Resource requests/limits for cluster DNS patch job.
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
 
 grafana:
   dashboards:

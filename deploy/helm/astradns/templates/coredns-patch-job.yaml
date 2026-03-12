@@ -81,6 +81,8 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            {{- toYaml .Values.clusterDNS.forwardExternalToAstraDNS.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
