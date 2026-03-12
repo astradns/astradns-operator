@@ -38,6 +38,12 @@ const (
 
 	upstreamPoolReadyCondition = "Ready"
 
+	// ConfigMap objects are capped at 1MiB. Keep a small safety headroom for
+	// metadata and key overhead so writes fail early with a clear status message.
+	configMapObjectSizeLimitBytes = 1 << 20
+	configMapSafetyOverheadBytes  = 4 << 10
+	maxAgentConfigJSONBytes       = configMapObjectSizeLimitBytes - configMapSafetyOverheadBytes
+
 	// initialRVAnnotation stores the ResourceVersion observed when the controller
 	// first reconciles a pool. Unlike the live ResourceVersion (which changes on
 	// every update), this value is monotonically ordered in etcd and reflects true
@@ -200,6 +206,21 @@ func (r *DNSUpstreamPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	if err := validateConfigMapPayloadSize(string(configJSON)); err != nil {
+		logger.Error(err, "Rendered config exceeded ConfigMap payload limit")
+		r.recordEvent(&pool, corev1.EventTypeWarning, "ConfigTooLarge", err.Error())
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pool,
+			metav1.ConditionFalse,
+			"ConfigTooLarge",
+			err.Error(),
+		); statusErr != nil {
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
+	}
+
 	if err := r.upsertConfigMap(ctx, r.operatorNamespace(pool.Namespace), string(configJSON)); err != nil {
 		err = fmt.Errorf("upsert configmap: %w", err)
 		logger.Error(err, "Could not update config map")
@@ -299,6 +320,20 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 		return fmt.Errorf("marshal config from remaining pool: %w", err)
 	}
 
+	if err := validateConfigMapPayloadSize(string(configJSON)); err != nil {
+		r.recordEvent(&pools.Items[0], corev1.EventTypeWarning, "ConfigTooLarge", err.Error())
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&pools.Items[0],
+			metav1.ConditionFalse,
+			"ConfigTooLarge",
+			err.Error(),
+		); statusErr != nil {
+			return fmt.Errorf("update oversized pool status: %w", statusErr)
+		}
+		return nil
+	}
+
 	if err := r.upsertConfigMap(ctx, configNamespace, string(configJSON)); err != nil {
 		return err
 	}
@@ -311,6 +346,19 @@ func (r *DNSUpstreamPoolReconciler) reconcileAfterPoolDeletion(ctx context.Conte
 		"Configuration rendered successfully",
 	); err != nil {
 		return fmt.Errorf("update remaining pool status: %w", err)
+	}
+
+	return nil
+}
+
+func validateConfigMapPayloadSize(renderedConfig string) error {
+	payloadSize := len(renderedConfig) + len(agentConfigKey)
+	if payloadSize > maxAgentConfigJSONBytes {
+		return fmt.Errorf(
+			"rendered config payload is %d bytes, exceeds safe ConfigMap limit of %d bytes",
+			payloadSize,
+			maxAgentConfigJSONBytes,
+		)
 	}
 
 	return nil

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +21,27 @@ func TestResolvedAgentConfigMapName(t *testing.T) {
 	if got := reconciler.resolvedAgentConfigMapName(); got != agentConfigMapName {
 		t.Fatalf("expected default ConfigMap name %q, got %q", agentConfigMapName, got)
 	}
+}
+
+func TestValidateConfigMapPayloadSize(t *testing.T) {
+	t.Run("payload within safe limit", func(t *testing.T) {
+		maxContentSize := maxAgentConfigJSONBytes - len(agentConfigKey)
+		if maxContentSize <= 0 {
+			t.Fatal("invalid size constants")
+		}
+
+		renderedConfig := strings.Repeat("a", maxContentSize)
+		if err := validateConfigMapPayloadSize(renderedConfig); err != nil {
+			t.Fatalf("expected payload to be accepted, got error: %v", err)
+		}
+	})
+
+	t.Run("payload above safe limit", func(t *testing.T) {
+		oversized := strings.Repeat("a", maxAgentConfigJSONBytes-len(agentConfigKey)+1)
+		if err := validateConfigMapPayloadSize(oversized); err == nil {
+			t.Fatal("expected payload size validation to fail for oversized config")
+		}
+	})
 }
 
 // --- Gap 6: validateDNSUpstreamPool and isValidUpstreamAddress edge cases ---
