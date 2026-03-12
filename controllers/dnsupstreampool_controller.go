@@ -512,8 +512,23 @@ func isValidUpstreamAddress(address string) bool {
 	if _, err := netip.ParseAddr(trimmed); err == nil {
 		return true
 	}
+	if looksLikeInvalidIPv4Literal(trimmed) {
+		return false
+	}
 
 	return len(validation.IsDNS1123Subdomain(trimmed)) == 0
+}
+
+func looksLikeInvalidIPv4Literal(value string) bool {
+	if strings.Count(value, ".") != 3 {
+		return false
+	}
+	for _, r := range value {
+		if r != '.' && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *DNSUpstreamPoolReconciler) operatorNamespace(fallback string) string {

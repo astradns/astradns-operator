@@ -32,9 +32,7 @@ func TestIsValidUpstreamAddress(t *testing.T) {
 	}{
 		{name: "valid IPv4", address: "1.1.1.1", want: true},
 		{name: "valid hostname", address: "dns.google", want: true},
-		// "999.999.999.999" fails IP parsing but passes DNS1123 subdomain validation,
-		// so the production code accepts it as a valid upstream address.
-		{name: "invalid IP but valid DNS subdomain 999.999.999.999", address: "999.999.999.999", want: true},
+		{name: "invalid IPv4 literal 999.999.999.999", address: "999.999.999.999", want: false},
 		{name: "invalid hostname leading dash", address: "-bad.com", want: false},
 		{name: "empty address", address: "", want: false},
 		{name: "whitespace-only address", address: "   ", want: false},
@@ -95,9 +93,7 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// "999.999.999.999" is not a valid IP but passes DNS1123 subdomain validation,
-			// so the production code treats it as a valid upstream address.
-			name: "invalid IP but valid DNS subdomain 999.999.999.999",
+			name: "invalid IPv4 literal 999.999.999.999",
 			pool: &v1alpha1.DNSUpstreamPool{
 				Spec: v1alpha1.DNSUpstreamPoolSpec{
 					Upstreams: []v1alpha1.Upstream{
@@ -105,7 +101,7 @@ func TestValidateDNSUpstreamPool(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "invalid hostname leading dash",
