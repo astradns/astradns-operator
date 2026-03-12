@@ -74,6 +74,32 @@ jobs:
           helm push "${chart_archive}" oci://ghcr.io/${{ github.repository_owner }}/helm-charts
           echo "oci://ghcr.io/${{ github.repository_owner }}/helm-charts/astradns:${{ github.ref_name }}" > dist/helm-chart-reference.txt
 
+      - name: Install ORAS
+        run: |
+          GOBIN="${HOME}/go/bin" go install oras.land/oras/cmd/oras@v1.2.3
+          echo "${HOME}/go/bin" >> "$GITHUB_PATH"
+
+      - name: Publish Artifact Hub repository metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACTHUB_REPOSITORY_ID: ${{ vars.ARTIFACTHUB_REPOSITORY_ID }}
+        run: |
+          if [ -z "${ARTIFACTHUB_REPOSITORY_ID}" ]; then
+            echo "ARTIFACTHUB_REPOSITORY_ID variable is required" >&2
+            exit 1
+          fi
+
+          cat > dist/artifacthub-repo.yml <<EOF
+          repositoryID: ${ARTIFACTHUB_REPOSITORY_ID}
+          EOF
+
+          echo "${GH_TOKEN}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+          oras push \
+            ghcr.io/${{ github.repository_owner }}/helm-charts/astradns:artifacthub.io \
+            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+            dist/artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+
       - name: Upload chart artifact
         uses: actions/upload-artifact@v4
         with:
@@ -82,6 +108,7 @@ jobs:
             dist/*.tgz
             dist/*-sbom.cdx.json
             dist/helm-chart-reference.txt
+            dist/artifacthub-repo.yml
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -92,3 +119,4 @@ jobs:
             dist/*.tgz
             dist/*-sbom.cdx.json
             dist/helm-chart-reference.txt
+            dist/artifacthub-repo.yml
