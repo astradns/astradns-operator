@@ -146,6 +146,7 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 	if len(policy.Spec.Selector.Namespaces) == 0 {
 		return errors.New("spec.selector.namespaces must contain at least one namespace")
 	}
+	seenSelectorNamespaces := make(map[string]struct{}, len(policy.Spec.Selector.Namespaces))
 	for i, namespace := range policy.Spec.Selector.Namespaces {
 		trimmed := strings.TrimSpace(namespace)
 		if trimmed == "" {
@@ -154,6 +155,10 @@ func (r *ExternalDNSPolicyReconciler) validateReferences(
 		if errs := validation.IsDNS1123Label(trimmed); len(errs) > 0 {
 			return fmt.Errorf("spec.selector.namespaces[%d] %q is not a valid namespace name", i, namespace)
 		}
+		if _, exists := seenSelectorNamespaces[trimmed]; exists {
+			return fmt.Errorf("spec.selector.namespaces[%d] %q is duplicated", i, namespace)
+		}
+		seenSelectorNamespaces[trimmed] = struct{}{}
 	}
 
 	upstreamPoolName, err := validatePolicyRefName(policy.Spec.UpstreamPoolRef.Name, "spec.upstreamPoolRef.name", true)
