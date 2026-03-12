@@ -46,6 +46,17 @@ operator:
     annotations: {}
     # -- Mount service account token in operator pods. Keep enabled for in-cluster API access.
     automountServiceAccountToken: true
+  startupProbe:
+    # -- Enable startup probe for the operator manager container.
+    enabled: true
+    # -- HTTP path used by startup probe.
+    path: /readyz
+    # -- Probe period in seconds.
+    periodSeconds: 5
+    # -- Probe timeout in seconds.
+    timeoutSeconds: 3
+    # -- Number of consecutive failures before startup probe fails.
+    failureThreshold: 24
 
 agent:
   image:

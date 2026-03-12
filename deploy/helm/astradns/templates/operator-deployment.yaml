@@ -88,6 +88,15 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
+          {{- if .Values.operator.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.operator.startupProbe.path | quote }}
+              port: health
+            periodSeconds: {{ .Values.operator.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.operator.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.operator.startupProbe.failureThreshold }}
+          {{- end }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
