@@ -10,10 +10,9 @@ namespace: ""
 imagePullSecrets: []
 
 operator:
-  image:
-    repository: ghcr.io/astradns/astradns-operator
-    tag: ""  # Defaults to v<appVersion>
-    pullPolicy: IfNotPresent
+  # -- Operator image pull policy.
+  # -- Image repository/tag are managed by the chart and pinned to ghcr.io/astradns/astradns-operator:v<appVersion>.
+  imagePullPolicy: IfNotPresent
   replicas: 1
   # -- Enable leader election for HA operator deployments
   leaderElect: true
@@ -68,25 +67,9 @@ operator:
       sleepSeconds: 5
 
 agent:
-  image:
-    repository: ghcr.io/astradns/astradns-agent
-    tag: "v0.2.5"  # Defaults to a published stable tag. Set empty to use v<appVersion>.
-    pullPolicy: IfNotPresent
-  # -- Optional engine-specific image overrides keyed by engine type.
-  # -- When repository is empty for the selected engine, chart falls back to agent.image with -<engine> tag suffix.
-  engineImages:
-    unbound:
-      repository: ""
-      tag: ""
-    coredns:
-      repository: ""
-      tag: ""
-    powerdns:
-      repository: ""
-      tag: ""
-    bind:
-      repository: ""
-      tag: ""
+  # -- Agent image pull policy.
+  # -- Image repository/tag are managed by the chart and pinned to ghcr.io/astradns/astradns-agent:v<appVersion>-<engine>.
+  imagePullPolicy: IfNotPresent
   # -- DNS engine type: unbound, coredns, powerdns, or bind
   engineType: unbound
   topology:

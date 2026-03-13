@@ -45,7 +45,7 @@ CRD changes --> Reconciler --> EngineConfig assembly
 
 ## Engine Selection
 
-The operator selects the config renderer via the `ASTRADNS_ENGINE_TYPE` environment variable (default: `unbound`). Supported values: `unbound`, `coredns`, `powerdns`.
+The operator selects the config renderer via the `ASTRADNS_ENGINE_TYPE` environment variable (default: `unbound`). Supported values: `unbound`, `coredns`, `powerdns`, `bind`.
 
 When deployed with Helm, this value is taken from `agent.engineType` and propagated to both operator and agent.
 
@@ -81,15 +81,14 @@ To avoid misconfiguration, cluster DNS integration requires `agent.network.mode=
 
 The integration toggle remains explicit because some clusters patch CoreDNS out-of-band (GitOps/platform controllers), and Helm should not overwrite cluster DNS unless requested.
 
-## Engine Image Strategy
+## Engine Image Policy
 
-The chart supports engine-specific image overrides via:
+The chart pins images to AstraDNS official artifacts for the selected chart version:
 
-- `agent.image` (default image)
-- `agent.engineImages.<engine>.repository`
-- `agent.engineImages.<engine>.tag`
+- Operator: `ghcr.io/astradns/astradns-operator:v<appVersion>`
+- Agent: `ghcr.io/astradns/astradns-agent:v<appVersion>-<engine>`
 
-If an override repository is set for the selected engine, Helm uses that image; otherwise it falls back to `agent.image`.
+Users only select the engine flavor via `agent.engineType`.
 
 ## Prerequisites
 

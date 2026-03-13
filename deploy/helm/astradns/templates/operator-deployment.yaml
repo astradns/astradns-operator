@@ -38,7 +38,7 @@ spec:
       containers:
         - name: operator
           image: {{ include "astradns.operator.image" . }}
-          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.operator.imagePullPolicy }}
           args:
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=:8443
@@ -58,7 +58,7 @@ spec:
             - name: ASTRADNS_AGENT_CONFIGMAP_NAME
               value: {{ include "astradns.agent.configmap" . | quote }}
             - name: ASTRADNS_ENGINE_TYPE
-              value: {{ .Values.agent.engineType | quote }}
+              value: {{ include "astradns.agent.engineType" . | quote }}
             - name: ASTRADNS_ENABLE_POOL_UNIQUENESS_WEBHOOK
               value: {{ .Values.webhook.enabled | quote }}
           ports:

@@ -16,9 +16,9 @@ This checklist is the release gate for promoting AstraDNS MVP to production.
 
 ## 3) Engine image strategy
 
-- [ ] Selected engine (`agent.engineType`) has a runnable image.
-- [ ] If using custom images, `agent.engineImages.<engine>` is set and pulled successfully.
-- [ ] Engine switch tested in non-prod (`unbound`/`coredns`/`powerdns`).
+- [ ] Selected engine (`agent.engineType`) has a published image variant.
+- [ ] Agent image resolves to `ghcr.io/astradns/astradns-agent:v<appVersion>-<engine>`.
+- [ ] Engine switch tested in non-prod (`unbound`/`coredns`/`powerdns`/`bind`).
 
 ## 4) Webhook enforcement profile
 

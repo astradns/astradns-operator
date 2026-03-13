@@ -115,10 +115,6 @@ var _ = BeforeSuite(func() {
 	By("installing Helm chart")
 	runMust("helm", "upgrade", "--install", helmRelease, chartPath,
 		"--namespace", ns,
-		"--set", "operator.image.repository=astradns-operator",
-		"--set", "operator.image.tag=integration",
-		"--set", "agent.image.repository=astradns-agent",
-		"--set", "agent.image.tag=integration",
 		"--set", "crds.install=true",
 		// Kind control-plane nodes are tainted; tolerate so pods schedule.
 		"--set", "agent.tolerations[0].key=node-role.kubernetes.io/control-plane",
@@ -127,6 +123,18 @@ var _ = BeforeSuite(func() {
 		"--set", "operator.tolerations[0].key=node-role.kubernetes.io/control-plane",
 		"--set", "operator.tolerations[0].operator=Exists",
 		"--set", "operator.tolerations[0].effect=NoSchedule",
+	)
+
+	By("overriding chart workloads with locally built integration images")
+	runMust("kubectl", "set", "image",
+		fmt.Sprintf("deployment/%s-operator", helmRelease),
+		fmt.Sprintf("operator=%s", operatorImg),
+		"-n", ns,
+	)
+	runMust("kubectl", "set", "image",
+		fmt.Sprintf("daemonset/%s-agent", helmRelease),
+		fmt.Sprintf("agent=%s", agentImg),
+		"-n", ns,
 	)
 
 	By("waiting for operator pod to be ready")

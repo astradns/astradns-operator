@@ -91,27 +91,26 @@ Default image tag derived from chart appVersion.
 Operator image
 */}}
 {{- define "astradns.operator.image" -}}
-{{- $tag := default (include "astradns.defaultImageTag" .) .Values.operator.image.tag }}
-{{- printf "%s:%s" .Values.operator.image.repository $tag }}
+{{- printf "ghcr.io/astradns/astradns-operator:%s" (include "astradns.defaultImageTag" .) -}}
 {{- end }}
 
 {{/*
-Agent image
+Agent engine type with validation.
+*/}}
+{{- define "astradns.agent.engineType" -}}
+{{- $engine := default "unbound" .Values.agent.engineType -}}
+{{- if not (has $engine (list "unbound" "coredns" "powerdns" "bind")) -}}
+{{- fail "agent.engineType must be one of: unbound, coredns, powerdns, bind" -}}
+{{- end -}}
+{{- $engine -}}
+{{- end }}
+
+{{/*
+Agent image pinned to published engine variant.
 */}}
 {{- define "astradns.agent.image" -}}
-{{- $engine := default "unbound" .Values.agent.engineType -}}
-{{- $repository := .Values.agent.image.repository -}}
-{{- $tag := default (include "astradns.defaultImageTag" .) .Values.agent.image.tag -}}
-{{- $engineImages := default (dict) .Values.agent.engineImages -}}
-{{- if hasKey $engineImages $engine -}}
-{{- $engineCfg := index $engineImages $engine -}}
-{{- $engineRepo := trim (default "" $engineCfg.repository) -}}
-{{- if ne $engineRepo "" -}}
-{{- $repository = $engineRepo -}}
-{{- $tag = default $tag $engineCfg.tag -}}
-{{- end -}}
-{{- end -}}
-{{- printf "%s:%s" $repository $tag -}}
+{{- $engine := include "astradns.agent.engineType" . -}}
+{{- printf "ghcr.io/astradns/astradns-agent:%s-%s" (include "astradns.defaultImageTag" .) $engine -}}
 {{- end }}
 
 {{/*
@@ -257,10 +256,10 @@ securityContext:
 containers:
   - name: agent
     image: {{ include "astradns.agent.image" . }}
-    imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+    imagePullPolicy: {{ .Values.agent.imagePullPolicy }}
     env:
       - name: ASTRADNS_ENGINE_TYPE
-        value: {{ .Values.agent.engineType | quote }}
+        value: {{ include "astradns.agent.engineType" . | quote }}
       - name: ASTRADNS_CONFIG_PATH
         value: /etc/astradns/config
       - name: ASTRADNS_LISTEN_ADDR

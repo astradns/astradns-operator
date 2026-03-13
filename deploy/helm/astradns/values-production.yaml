@@ -19,18 +19,9 @@ agent:
   proxyTimeout: 2s
   engineRecoveryInterval: 5s
 
-  # Optional image strategy: set explicit image repositories by engine.
-  # Keep empty to reuse agent.image repository/tag.
-  engineImages:
-    unbound:
-      repository: ""
-      tag: ""
-    coredns:
-      repository: ""
-      tag: ""
-    powerdns:
-      repository: ""
-      tag: ""
+  # Select engine image flavor published by AstraDNS.
+  # The chart automatically resolves to ghcr.io/astradns/astradns-agent:v<appVersion>-<engine>.
+  engineType: unbound
 
 clusterDNS:
   forwardExternalToAstraDNS:
