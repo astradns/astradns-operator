@@ -60,6 +60,34 @@ spec:
                     - validate
                     type: string
                 type: object
+              domainFilter:
+                description: DomainFilter configures proxy-level domain allow/deny
+                  filtering.
+                properties:
+                  action:
+                    default: refused
+                    description: 'Action determines the DNS response code for denied
+                      queries: refused or nxdomain.'
+                    enum:
+                    - refused
+                    - nxdomain
+                    type: string
+                  allow:
+                    description: |-
+                      Allow is a list of domain patterns that are permitted.
+                      If non-empty, only domains matching at least one pattern are allowed.
+                      Patterns support wildcards: "*.example.com" matches any subdomain.
+                    items:
+                      type: string
+                    type: array
+                  deny:
+                    description: |-
+                      Deny is a list of domain patterns that are blocked.
+                      Deny rules are evaluated after allow rules; a domain matching both is denied.
+                    items:
+                      type: string
+                    type: array
+                type: object
               healthCheck:
                 description: HealthCheck configures health checking for upstreams.
                 properties:
