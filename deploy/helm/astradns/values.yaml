@@ -70,7 +70,7 @@ operator:
 agent:
   image:
     repository: ghcr.io/astradns/astradns-agent
-    tag: "v0.2.0"  # Defaults to a published stable tag. Set empty to use v<appVersion>.
+    tag: "v0.2.5"  # Defaults to a published stable tag. Set empty to use v<appVersion>.
     pullPolicy: IfNotPresent
   # -- Optional engine-specific image overrides keyed by engine type.
   # -- When repository is empty for the selected engine, chart falls back to agent.image with -<engine> tag suffix.
