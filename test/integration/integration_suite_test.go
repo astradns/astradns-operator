@@ -98,8 +98,8 @@ var _ = BeforeSuite(func() {
 		"-t", operatorImg, ".")
 
 	By("building agent Docker image")
-	runFromDir(orgDir(), "docker", "build",
-		"-f", "astradns-agent/Dockerfile",
+	runFromDir(filepath.Join(orgDir(), "astradns-agent"), "docker", "build",
+		"-f", "Dockerfile",
 		"-t", agentImg, ".")
 
 	By("loading images into Kind cluster")
