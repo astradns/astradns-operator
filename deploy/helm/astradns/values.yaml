@@ -47,8 +47,8 @@ operator:
   serviceAccount:
     # -- Annotations for the operator service account
     annotations: {}
-    # -- Mount service account token in operator pods. Set true explicitly for in-cluster API auth.
-    automountServiceAccountToken: false
+    # -- Mount service account token in operator pods for in-cluster API auth.
+    automountServiceAccountToken: true
   startupProbe:
     # -- Enable startup probe for the operator manager container.
     enabled: true

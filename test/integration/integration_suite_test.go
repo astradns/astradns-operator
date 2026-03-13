@@ -109,6 +109,9 @@ var _ = BeforeSuite(func() {
 	By("creating test namespace")
 	_, _ = runOrErr("kubectl", "create", "namespace", ns)
 
+	By("labeling namespace for metrics access")
+	_, _ = runOrErr("kubectl", "label", "namespace", ns, "metrics=enabled", "--overwrite")
+
 	By("installing Helm chart")
 	runMust("helm", "upgrade", "--install", helmRelease, chartPath,
 		"--namespace", ns,
@@ -126,24 +129,24 @@ var _ = BeforeSuite(func() {
 		"--set", "operator.tolerations[0].effect=NoSchedule",
 	)
 
-	By("waiting for operator pod to be running")
+	By("waiting for operator pod to be ready")
 	Eventually(func(g Gomega) {
-		phase, err := runOrErr("kubectl", "get", "pods",
+		ready, err := runOrErr("kubectl", "get", "pods",
 			"-n", ns,
 			"-l", "app.kubernetes.io/component=operator",
-			"-o", "jsonpath={.items[0].status.phase}")
+			"-o", "jsonpath={.items[0].status.containerStatuses[0].ready}")
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(phase).To(Equal("Running"))
+		g.Expect(ready).To(Equal("true"))
 	}, 3*time.Minute, 2*time.Second).Should(Succeed())
 
-	By("waiting for agent pod to be running")
+	By("waiting for agent pod to be ready")
 	Eventually(func(g Gomega) {
-		phase, err := runOrErr("kubectl", "get", "pods",
+		ready, err := runOrErr("kubectl", "get", "pods",
 			"-n", ns,
 			"-l", "app.kubernetes.io/component=agent",
-			"-o", "jsonpath={.items[0].status.phase}")
+			"-o", "jsonpath={.items[0].status.containerStatuses[0].ready}")
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(phase).To(Equal("Running"))
+		g.Expect(ready).To(Equal("true"))
 	}, 3*time.Minute, 2*time.Second).Should(Succeed())
 })
 
