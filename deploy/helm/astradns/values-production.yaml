@@ -10,6 +10,7 @@ agent:
   # Use node-local mode for deterministic same-node forwarding from CoreDNS.
   network:
     mode: linkLocal
+    # Default chart link-local address. Override if your environment reserves this IP.
     linkLocalIP: 169.254.20.11
 
   serviceAccount:
@@ -29,6 +30,7 @@ clusterDNS:
     namespace: kube-system
     configMapName: coredns
     rolloutDeployment: coredns
+    # Keep this aligned with agent.network.linkLocalIP for node-local profile.
     forwardTarget: 169.254.20.11:5353
     kubectlImagePullPolicy: IfNotPresent
     resources:

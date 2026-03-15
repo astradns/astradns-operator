@@ -1,6 +1,6 @@
 # astradns-operator
 
-AstraDNS Operator is the control-plane component of AstraDNS. It watches custom resources that describe DNS configuration intent, renders engine-specific configuration, and writes the result to a ConfigMap consumed by the agent DaemonSet.
+AstraDNS Operator is the control-plane component of AstraDNS. It watches custom resources that describe DNS configuration intent, renders engine-specific configuration, and writes the result to a ConfigMap consumed by the agent workload (DaemonSet in `node-local`, Deployment in `central`).
 
 ## Custom Resource Definitions
 
@@ -53,7 +53,7 @@ When deployed with Helm, this value is taken from `agent.engineType` and propaga
 
 The chart includes a production profile at `deploy/helm/astradns/values-production.yaml` with:
 
-- Link-local data path (`agent.network.mode=linkLocal`, `169.254.20.11`)
+- Link-local data path (`agent.network.mode=linkLocal`, default `agent.network.linkLocalIP=169.254.20.11`)
 - Optional cluster DNS integration job (`clusterDNS.forwardExternalToAstraDNS.enabled=true`)
 - PodDisruptionBudgets + NetworkPolicies + PriorityClass defaults
 - Agent service account token automount disabled by default
@@ -63,15 +63,21 @@ The chart includes a production profile at `deploy/helm/astradns/values-producti
 Install example:
 
 ```sh
-helm upgrade --install astradns deploy/helm/astradns \
+# optional: fetch the maintained production profile
+curl -fsSL https://raw.githubusercontent.com/astradns/astradns-operator/main/deploy/helm/astradns/values-production.yaml -o values-production.yaml
+
+helm upgrade --install astradns oci://ghcr.io/astradns/helm-charts/astradns \
+  --version <chart-version> \
   -n astradns-system --create-namespace \
-  -f deploy/helm/astradns/values-production.yaml \
+  -f values-production.yaml \
   --set webhook.certManager.issuerRef.name=<cluster-issuer-name>
 ```
 
 ## CoreDNS Integration
 
-With `clusterDNS.forwardExternalToAstraDNS.enabled=true`, Helm runs a post-install/post-upgrade job that patches the CoreDNS ConfigMap forward target to the AstraDNS link-local listener (`169.254.20.11:5353` by default).
+With `clusterDNS.forwardExternalToAstraDNS.enabled=true`, Helm runs a post-install/post-upgrade job that patches the CoreDNS ConfigMap forward target to the AstraDNS listener. In `node-local`, this defaults to `169.254.20.11:5353`.
+
+If you customize `agent.network.linkLocalIP`, also set `clusterDNS.forwardExternalToAstraDNS.forwardTarget=<linkLocalIP>:5353`.
 
 `clusterDNS.provider` is currently validated to `coredns` when this integration is enabled.
 

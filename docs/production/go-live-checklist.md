@@ -11,7 +11,7 @@ This checklist is the release gate for promoting AstraDNS MVP to production.
 ## 2) Node-local data path mode
 
 - [ ] `agent.network.mode=linkLocal` enabled.
-- [ ] Agent binds to `169.254.20.11:5353` on all nodes.
+- [ ] Agent binds to the configured link-local endpoint on all nodes (default: `169.254.20.11:5353`).
 - [ ] CoreDNS forward target matches the configured link-local endpoint.
 
 ## 3) Engine image strategy

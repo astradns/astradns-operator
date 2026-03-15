@@ -8,7 +8,7 @@ CoreDNS integration behaves differently based on `agent.topology.profile`.
 
 | Profile | Forward target source |
 |---|---|
-| `node-local` | `clusterDNS.forwardExternalToAstraDNS.forwardTarget` (usually `169.254.20.11:5353`) |
+| `node-local` | `clusterDNS.forwardExternalToAstraDNS.forwardTarget` (chart default: `169.254.20.11:5353`) |
 | `central` + `agent.dnsService.clusterIP` set | fixed Service ClusterIP + `agent.dnsService.port` |
 | `central` + `agent.dnsService.clusterIP` empty | runtime service discovery (`kubectl get service ...`) |
 
@@ -24,7 +24,7 @@ agent:
     profile: node-local
   network:
     mode: linkLocal
-    linkLocalIP: 169.254.20.11
+    linkLocalIP: 169.254.20.11 # chart default
 
 clusterDNS:
   forwardExternalToAstraDNS:
@@ -32,8 +32,10 @@ clusterDNS:
     namespace: kube-system
     configMapName: coredns
     rolloutDeployment: coredns
-    forwardTarget: 169.254.20.11:5353
+    forwardTarget: 169.254.20.11:5353 # keep aligned with linkLocalIP
 ```
+
+`169.254.20.11` is a default, not a fixed contract. If your environment uses a different link-local IP, keep `forwardTarget` aligned with `agent.network.linkLocalIP`.
 
 ### central profile with fixed clusterIP
 
