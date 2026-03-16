@@ -7,6 +7,11 @@ The AstraDNS chart deploys:
 - optional CoreDNS forwarding patch job;
 - optional observability assets (ServiceMonitor and Grafana dashboard ConfigMap).
 
+## Project links
+
+- Documentation site: https://docs.astradns.com/
+- Artifact Hub package: https://artifacthub.io/packages/helm/astradns/astradns
+
 ## What users configure
 
 The chart pins official images by chart `appVersion`.
