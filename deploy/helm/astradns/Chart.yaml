@@ -2,8 +2,8 @@ apiVersion: v2
 name: astradns
 description: AstraDNS - Kubernetes DNS management operator and agent
 type: application
-version: 0.2.5
-appVersion: "0.2.5"
+version: 0.2.6
+appVersion: "0.2.6"
 maintainers:
   - name: AstraDNS Team
 keywords:
