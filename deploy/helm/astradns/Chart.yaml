@@ -2,8 +2,8 @@ apiVersion: v2
 name: astradns
 description: AstraDNS - Kubernetes DNS management operator and agent
 type: application
-version: 0.2.8
-appVersion: "0.2.8"
+version: 0.2.9
+appVersion: "0.2.9"
 home: https://docs.astradns.com/
 sources:
   - https://github.com/astradns/astradns-operator
@@ -19,15 +19,15 @@ annotations:
       url: https://github.com/astradns/astradns-agent
   artifacthub.io/images: |
     - name: astradns-operator
-      image: ghcr.io/astradns/astradns-operator:v0.2.8
+      image: ghcr.io/astradns/astradns-operator:v0.2.9
     - name: astradns-agent-unbound
-      image: ghcr.io/astradns/astradns-agent:v0.2.8-unbound
+      image: ghcr.io/astradns/astradns-agent:v0.2.9-unbound
     - name: astradns-agent-coredns
-      image: ghcr.io/astradns/astradns-agent:v0.2.8-coredns
+      image: ghcr.io/astradns/astradns-agent:v0.2.9-coredns
     - name: astradns-agent-powerdns
-      image: ghcr.io/astradns/astradns-agent:v0.2.8-powerdns
+      image: ghcr.io/astradns/astradns-agent:v0.2.9-powerdns
     - name: astradns-agent-bind
-      image: ghcr.io/astradns/astradns-agent:v0.2.8-bind
+      image: ghcr.io/astradns/astradns-agent:v0.2.9-bind
 maintainers:
   - name: AstraDNS Team
 keywords:
