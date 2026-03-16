@@ -84,6 +84,11 @@ For `node-local` + `agent.network.mode=linkLocal`:
 `169.254.20.11` is a chart default, not a fixed universal value.
 If you customize `agent.network.linkLocalIP`, keep `clusterDNS.forwardExternalToAstraDNS.forwardTarget` aligned as `<linkLocalIP>:5353`.
 
+## Schema and signatures
+
+- This chart includes a values schema (`values.schema.json`) for typed values validation and Artifact Hub Values Schema UI.
+- Tagged releases publish chart provenance (`.prov`) so consumers can verify integrity with Helm provenance checks.
+
 ## Key values
 
 | Key | Default | Purpose |

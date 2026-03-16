@@ -1,0 +1,563 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "AstraDNS Helm Values",
+  "type": "object",
+  "additionalProperties": true,
+  "definitions": {
+    "imagePullPolicy": {
+      "type": "string",
+      "enum": [
+        "Always",
+        "IfNotPresent",
+        "Never"
+      ]
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "objectMap": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "objectArray": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "limits": {
+          "$ref": "#/definitions/stringMap"
+        }
+      }
+    },
+    "intOrPercent": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    }
+  },
+  "properties": {
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "namespace": {
+      "type": "string"
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "imagePullPolicy": {
+          "$ref": "#/definitions/imagePullPolicy"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "leaderElect": {
+          "type": "boolean"
+        },
+        "leaderElection": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "resources": {
+          "$ref": "#/definitions/resources"
+        },
+        "nodeSelector": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "tolerations": {
+          "$ref": "#/definitions/objectArray"
+        },
+        "affinity": {
+          "$ref": "#/definitions/objectMap"
+        },
+        "podLabels": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "podAnnotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "priorityClassName": {
+          "type": "string"
+        },
+        "pdb": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minAvailable": {
+              "$ref": "#/definitions/intOrPercent"
+            }
+          }
+        },
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "annotations": {
+              "$ref": "#/definitions/stringMap"
+            },
+            "automountServiceAccountToken": {
+              "type": "boolean"
+            }
+          }
+        },
+        "startupProbe": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "path": {
+              "type": "string"
+            },
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "preStop": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "sleepSeconds": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "imagePullPolicy": {
+          "$ref": "#/definitions/imagePullPolicy"
+        },
+        "engineType": {
+          "type": "string",
+          "enum": [
+            "unbound",
+            "coredns",
+            "powerdns",
+            "bind"
+          ]
+        },
+        "topology": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "profile": {
+              "type": "string",
+              "enum": [
+                "node-local",
+                "central"
+              ]
+            }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "hostPort",
+                "linkLocal"
+              ]
+            },
+            "linkLocalIP": {
+              "type": "string"
+            }
+          }
+        },
+        "logMode": {
+          "type": "string",
+          "enum": [
+            "sampled",
+            "full"
+          ]
+        },
+        "logSampleRate": {
+          "type": "string"
+        },
+        "proxyTimeout": {
+          "type": "string"
+        },
+        "proxyCacheMaxEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "proxyCacheDefaultTTL": {
+          "type": "string"
+        },
+        "engineConnectionPoolSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "configWatchDebounce": {
+          "type": "string"
+        },
+        "engineRecoveryInterval": {
+          "type": "string"
+        },
+        "componentErrorBuffer": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "bearerToken": {
+              "type": "string"
+            }
+          }
+        },
+        "diagnostics": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "targets": {
+              "type": "string"
+            },
+            "interval": {
+              "type": "string"
+            },
+            "timeout": {
+              "type": "string"
+            }
+          }
+        },
+        "tracing": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "insecure": {
+              "type": "boolean"
+            },
+            "sampleRatio": {
+              "type": "string"
+            },
+            "serviceName": {
+              "type": "string"
+            }
+          }
+        },
+        "resources": {
+          "$ref": "#/definitions/resources"
+        },
+        "nodeSelector": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "tolerations": {
+          "$ref": "#/definitions/objectArray"
+        },
+        "affinity": {
+          "$ref": "#/definitions/objectMap"
+        },
+        "podLabels": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "podAnnotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "priorityClassName": {
+          "type": "string"
+        },
+        "pdb": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "$ref": "#/definitions/intOrPercent"
+            }
+          }
+        },
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "annotations": {
+              "$ref": "#/definitions/stringMap"
+            },
+            "automountServiceAccountToken": {
+              "type": "boolean"
+            }
+          }
+        },
+        "deployment": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "replicas": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "strategy": {
+              "$ref": "#/definitions/objectMap"
+            },
+            "topologySpreadConstraints": {
+              "$ref": "#/definitions/objectArray"
+            }
+          }
+        },
+        "dnsService": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer",
+                "ExternalName"
+              ]
+            },
+            "clusterIP": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "sessionAffinity": {
+              "type": "string",
+              "enum": [
+                "None",
+                "ClientIP"
+              ]
+            },
+            "sessionAffinityTimeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "crds": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "install": {
+          "type": "boolean"
+        }
+      }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "labels": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "scrapeTimeout": {
+          "type": "string"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "metricsNamespaceSelector": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "certManager": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "issuerRef": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "Issuer",
+                    "ClusterIssuer"
+                  ]
+                },
+                "group": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "clusterDNS": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "coredns"
+          ]
+        },
+        "forwardExternalToAstraDNS": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "configMapName": {
+              "type": "string"
+            },
+            "rolloutDeployment": {
+              "type": "string"
+            },
+            "forwardTarget": {
+              "type": "string"
+            },
+            "fallbackUpstream": {
+              "type": "string"
+            },
+            "kubectlImage": {
+              "type": "string"
+            },
+            "kubectlImagePullPolicy": {
+              "$ref": "#/definitions/imagePullPolicy"
+            },
+            "resources": {
+              "$ref": "#/definitions/resources"
+            }
+          }
+        }
+      }
+    },
+    "grafana": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "dashboards": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "labels": {
+              "$ref": "#/definitions/stringMap"
+            }
+          }
+        }
+      }
+    }
+  }
+}

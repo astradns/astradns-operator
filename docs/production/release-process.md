@@ -20,7 +20,23 @@
 helm package deploy/helm/astradns --destination dist
 ```
 
-The release workflow also performs chart packaging on tags.
+For tagged releases, the workflow signs the chart package and publishes provenance:
+
+```sh
+helm package deploy/helm/astradns \
+  --destination dist \
+  --sign \
+  --key "<signing-key-uid>" \
+  --keyring "<secring.gpg>" \
+  --passphrase-file "<passphrase-file>"
+```
+
+Required GitHub Actions secrets for signed releases:
+
+- `HELM_SIGNING_PGP_PRIVATE_KEY` (ASCII armored private key or base64-encoded key)
+- `HELM_SIGNING_PGP_PASSPHRASE` (empty if key has no passphrase)
+
+The chart also ships `deploy/helm/astradns/values.schema.json` for Artifact Hub Values Schema reference and Helm values validation.
 
 ## Helm distribution
 
@@ -57,6 +73,7 @@ Use one of the following rollout profiles for production upgrades.
 ## Release artifacts
 
 - Helm chart package (`dist/astradns-<version>.tgz`)
+- Helm provenance file (`dist/astradns-<version>.tgz.prov`)
 - CycloneDX SBOMs for operator source and Helm chart (`dist/*-sbom.cdx.json`)
 - Release notes with:
   - breaking changes

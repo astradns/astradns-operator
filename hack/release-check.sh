@@ -4,9 +4,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_FILE="${ROOT_DIR}/deploy/helm/astradns/Chart.yaml"
+VALUES_SCHEMA_FILE="${ROOT_DIR}/deploy/helm/astradns/values.schema.json"
 
 if [ ! -f "${CHART_FILE}" ]; then
   echo "Chart.yaml not found at ${CHART_FILE}" >&2
+  exit 1
+fi
+
+if [ ! -f "${VALUES_SCHEMA_FILE}" ]; then
+  echo "values.schema.json not found at ${VALUES_SCHEMA_FILE}" >&2
   exit 1
 fi
 
